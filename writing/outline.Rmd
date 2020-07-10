@@ -33,7 +33,12 @@ sim_pop <- function (x0, t, trend, sd) {
   for (i in 1:(length(pop) - 1)) {
     pop[i + 1] <- rnorm(1, pop[i] + trend, sd)
   }
-  return(tibble(time = 1:t, pop = pop))
+  return(tibble(time = 1:t, pop = pop, trend = trend, sd = sd))
+}
+
+multi_sim <- function(nsim, x0, t, trend, sd) {
+  simulations <- lapply(1:nsim, function(x) sim_pop(x0, t, trend, sd))
+  return(bind_rows(simulations, .id = "simulation"))
 }
 
 ```
@@ -41,8 +46,9 @@ sim_pop <- function (x0, t, trend, sd) {
 ```{r}
 # simulate model
 set.seed(123)
-sim_list <- lapply(1:100, function(x) sim_pop(10^3, 100, 1.5, 5))
-sim_df <- bind_rows(sim_list, .id = "simulation")
+sim_df <- multi_sim(100, 10^3, 100, 1.5, 5)
+# sim_list <- lapply(1:100, function(x) sim_pop(10^3, 100, 1.5, 5))
+# sim_df <- bind_rows(sim_list, .id = "simulation")
 
 sim_df %>% ggplot() + 
   geom_line(aes(x = time, y = pop, group = simulation), alpha = 0.5) + 
@@ -138,6 +144,25 @@ ggplot(delay_df) +
 ```
 
 ```{r}
+# sensitivity analysis following Fig. 1 c-d in White 2019
+set.seed(123)
+trend_var <- seq(1, 3, by = 0.5)
+sd_var <- 1:6
+trend_cst <- rep(1.5, length = length(sd_var))
+sd_cst <- rep(5, length = length(trend_var))
 
+trends <- c(trend_var, trend_cst)
+sds    <- c(sd_cst, sd_var)
+
+sensitivity_list <- lapply(seq_along(trends), 
+                           function(x) multi_sim(100, 10^3, 100, trends[x], sds[x]))
+sens_df <- bind_rows(sensitivity_list)
+```
+
+```{r}
+sens_df %>%
+  ggplot() +
+  geom_line(aes(x = time, y = pop, group = simulation)) +
+  facet_wrap(~interaction(sd, trend) )
 ```
 
