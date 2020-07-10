@@ -16,8 +16,8 @@ my_theme <- function(...) theme_minimal(base_size = 15)
 # Intro
 Conservationists need to know two things: 
 
-1. Is this population declining? 
-2. what is the "best" intervention to halt or reverse this trend?
+1. What is the population trend? 
+2. what is the "best" intervention to assist or reverse this trend?
 
 * Describe common methods used in conservation management.
 * Note, that the general problems (1 & 2) are encountered in clinical research
@@ -189,6 +189,42 @@ sens_delay <-
          max_delay = max(delay))
 ```
 
+# Trend detection: sequential vs fixed sample approaches
+Managers need to detect population trends in a timely and reliable manner. Timeliness is reflected in the number of samples (e.g., years) needed to detect a trend. Reliability is captured by the type I error and power of a test.
+
+Linear regression is commonly used to detect trends in population data. For instance,
+$$ N_{t+1} \sim N(N_t + r,\sigma), $$
+Where $N_t$ is the population size at time $t$, $r$ is the population trend, and $\sigma$ is the population variability.
+
+To identify the timeliness and reliability of linear regression for detecting population trends, [White (2019)](https://academic.oup.com/bioscience/article/69/1/40/5195956#129750432) repeatedly fit linear models to sub-samples of a time series to identify the minimum sample size needed to achieve a specified type I error and power. That is, for a time series with $T$ time points, he fit a linear regression model to each contiguous sub-samples of size $2, 3, \ldots, T-1$. Using the arbitrary (but conventional) benchmark of 0.8 power at the 0.05 significance level, White used the regression outputs to find the minimum sub-sample length such that 80 % of the samples had a significant regression slope coefficient. This is essentially a sample size calculation for a one-sided hypothesis test $H_0: r = 0$ vs $H_1: r > 0$.
+
+We can also test this one-sided hypothesis using a sequential test. We can define our sequential test statistic $(S)$ as:
+
+\begin{align*}
+S_0 & = 0 \\
+S_n & = \frac{P(N_{t+1} | N_t, \hat{r}, \sigma)}{P(N_{t+1} | N_t, r = 0, \sigma)}
+\end{align*}
+
+where $\hat{r}$ is the MLE of r constrained to  $r \in (0,\inf)$ or $r \in (-\inf, 0)$ depending on whether detection of a linear increase or decrease is desired.
+
+The decision rule is:
+
+\begin{align*}
+    \begin{cases}
+      \text{reject } H_0  & \Sigma^{n}_{r = 0} S_r > \log(A) \\
+      \text{accept } H_0 & \Sigma^{n}_{r = 0} S_r \leq \log(B) \\
+      \text{continue sampling} & \log(B)  <  \Sigma^{n}_{r = 0} S_r  \leq  \log(A)  
+    \end{cases}
+\end{align*}
+
+The thresholds are set following Wald's method such that $A \sim \frac{1-\beta}{\alpha}$ and $B \sim \frac{\beta}{1-\alpha}$ where $\alpha$ and $\beta$ is the probabilities of type I and II error, respectively.
+
+Here, I do a simulation study to assess the performance of a one-sided sequential generalized likelihood ratio test (SGLRT) that is directly comparable to the power analysis shown in Figure 1 of White 2019.
+
+## Minimum sample size to detect population trend (from White 2019)
+![](white_2019_fig_1.jpeg)
+
+## Sample sizes needed to detect trend using SGLRT
 ```{r plot_example, out.width = "50%", fig.show = "hold", echo = FALSE}
 # plot example simulations
 sim_df %>% ggplot() + 
@@ -236,3 +272,36 @@ sens_delay %>%
   my_theme()
 ```
 
+For panels c and d: 
+
+* solid = mean detection time
+* dashed = 80^th^ percentile of detection time
+* dotted = maximum detection time
+    
+## Initial impressions
+
+1. Effect of trend strength on detection
+    + On average, the sequential test requires fewer samples than the fixed-sample procedure (Fig. 1 c.solid line). This is also true of the 80^th^ percentile run length for smaller trend strengths, the run length is similar to the fixed-sample approach when the trend is strong.
+    + Interestingly, the longest run lengths of the sequential test appear to be similiar to the minimum samples needed under the fixed-sample approach. (With the caveat that more extreme values of the maximum run length are likely to appear for larger numbers of simulations. For this simple model, the maximum run length may have been calculated analytically [at least for simple hypothesis situation])
+    
+2. Effect of population variability on detection
+    + The average run length was comparable or less than the minimum sample size needed for the fixed-sample approach. They appear to be the same for lower variability, but the number of samples needed as variability increases grows more slowly for the sequential approach than the fixed-sample approach.
+    + The maximum run length appears to grow more slowly than the minimum sample size needed under the fixed sample approach.
+    + note, that the current sequential test I'm using includes the true population variability as a parameter. So, the test would likely perform worse (more similar to  fixed sample procedure) if variability was unknown and needed to be estimated.
+    
+## Takeaways
+Sequential testing approaches may out-perform a common method that is used to detect population trends and for power analyses to determine sample sizes for monitoring design. If the promise of these preliminary results holds up, introducing sequential approaches to population monitoring and trend detection would have an important impact on research practices for conservation management,
+
+# extensions
+
+## immediate
+
+* Detecting time-varying trends. A problem shared by the current sequential test (and the fixed sample approach) is that it doesn't deal well with time-varying trends. In both simulation studies, it is assumed that the trend is constant. Sequential methods allowing for changing trends (sliding window or weighted tests) will be an important generalization and provide another improvement over the basic linear regression approach.
+
+* Estimation of population variability. Need to check how sequential test performs when variability is unknown and an estimate must be used the the calculation of the test statistic.
+
+## longer term
+
+* spatial replication: how can we leverage spatial replicates to improve detection of trends? A fixed sample simulation study of this problem is [Rhodes and Jonzen (2011)](https://onlinelibrary.wiley.com/doi/full/10.1111/j.1600-0587.2011.06370.x). This is a common case in sequential analysis literature.
+
+* sequential methods for evaluating management alternatives: Here is where I would need to leverage the connections between clinical trials and wildlife management. May be a fruitful extension. Need to understand how it dovetails with adaptive management approaches (dynamic programming is common to both approaches).
