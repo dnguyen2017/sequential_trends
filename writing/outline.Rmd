@@ -1,0 +1,143 @@
+---
+title: "Sequential tests for rapid detection of population decline"
+author: "David Nguyen"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+# Intro
+Conservationists need to know two things: 
+
+1. Is this population declining? 
+2. what is the "best" intervention to halt or reverse this trend?
+
+* Describe common methods used in conservation management.
+* Note, that the general problems (1 & 2) are encountered in clinical research
+* describe benefits of sequential methods in clinical research:
+    + fewer samples required (on average)
+    + allows for flexibility (e.g., fully sequential and interim analyses)
+    + allows for early stopping of trial based on "futility"
+    
+```{r}
+# linear population trend model w/ normal error
+sim_pop <- function (x0, t, trend, sd) {
+  pop <- vector("numeric", length = t)
+  pop[1] <- x0
+  for (i in 1:(length(pop) - 1)) {
+    pop[i + 1] <- rnorm(1, pop[i] + trend, sd)
+  }
+  return(tibble(time = 1:t, pop = pop))
+}
+
+```
+
+```{r}
+# simulate model
+set.seed(123)
+sim_list <- lapply(1:100, function(x) sim_pop(10^3, 100, 1.5, 5))
+sim_df <- bind_rows(sim_list, .id = "simulation")
+
+sim_df %>% ggplot() + 
+  geom_line(aes(x = time, y = pop, group = simulation), alpha = 0.5) + 
+  theme_minimal()
+```
+
+```{r}
+# one sided sprt calculation
+objfn <- function(trend, x1, x0, sd) {
+  # likelihood( x1 | x0, r, dispersion )
+  dnorm(x = x1, mean = x0 + trend, sd = sd)
+}
+
+
+#  find restricted MLE under h_0 or h_1
+likelihood <- function (x_prev, x_now, sd, interval = c(), guess = 1.5) {
+  opt <- optim(par = guess, fn = objfn, control = list(fnscale = -1), 
+      method = "Brent", lower = interval[1], upper = interval[2],
+      x0 = x_prev, x1 = x_now, sd = sd)
+  return(opt$value)
+}
+
+# sequential test functions
+calc_sr <- function(data, sd, accept_reg = c(0,0), reject_reg = c(0, 5)) {
+  
+  # initialize empty columns for likelihood calculations
+  data$lik0 <- NA
+  data$lik1 <- NA
+  
+  # parameter space
+  theta0 <- accept_reg
+  theta1 <- reject_reg
+  
+  # use midpoint of interval as init guess for optim (Brent's method)
+  guess0 <- accept_reg[1] + (accept_reg[2] - accept_reg[1]) / 2 
+  guess1 <- reject_reg[1] + (reject_reg[2] - reject_reg[1]) / 2 
+  
+  sim_number <- 1
+  for (i in 2:nrow(data)) {
+    
+    if (data[i, "simulation"] == sim_number + 1) {
+      # skip calculation of likelihood for the first observation in each simluation
+      sim_number <- sim_number + 1
+      next
+    }
+    
+    # observed states and known pars
+    x0 <- unlist(data[i-1, "pop"])
+    x1 <- unlist(data[i, "pop"])
+    
+    # likelihood calculation
+    data[i,"lik0"] <- dnorm(x = x1, mean = x0, sd = sd) # H0: x_t+1 ~ N(x_t, sd)
+    data[i,"lik1"] <- likelihood(x_prev = x0, x_now = x1, sd = sd,  # p(x_now | x_prev, disp, theta \in Theta_1)
+                                   interval = theta1, guess = guess1)
+  }
+  
+  return(data)
+}
+```
+
+```{r time_to_detection}
+# calculate time required to detect trend
+sprt_df <- calc_sr(sim_df, sd = 5)
+
+sprt_df <- 
+  sprt_df %>%  
+  group_by(simulation) %>%
+  mutate(sr = log(lik1/lik0) ,
+         sr = ifelse(is.na(sr), 0, sr),
+         sprt = cumsum(sr),
+         a = log( (1 - 0.2)/ 0.05),
+         b = log(0.2/(1 - 0.05)),
+         decision = case_when(sprt <= a & sprt >= b ~"?",
+                              sprt > a ~ "H1",
+                              sprt < b ~ "H0"))
+
+is_h1 <- function(x) x == "H1"
+
+delay_df <- 
+  sprt_df %>% ungroup() %>%
+  group_by(simulation) %>%
+  summarize(delay = unique(detect_index(decision, is_h1))) %>%
+  mutate(mean_delay = mean(delay),
+         median_delay = median(delay),
+         p20_delay = quantile(delay, probs = 0.2),
+         p80_delay = quantile(delay, probs = 0.8))
+
+ggplot(delay_df) + 
+  geom_bar(aes(x = delay)) +
+  geom_vline(aes(xintercept = mean_delay)) +
+  geom_vline(aes(xintercept = median_delay), linetype = "dashed")
+  
+```
+
+```{r}
+
+```
+
