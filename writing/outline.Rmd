@@ -8,8 +8,9 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 library(tidyverse)
+my_theme <- function(...) theme_minimal(base_size = 15) 
 ```
 
 # Intro
@@ -20,7 +21,7 @@ Conservationists need to know two things:
 
 * Describe common methods used in conservation management.
 * Note, that the general problems (1 & 2) are encountered in clinical research
-* describe benefits of sequential methods in clinical research:
+* describe benefits of sequential methods in clinical research and why these benefits are also attractive for conservation management:
     + fewer samples required (on average)
     + allows for flexibility (e.g., fully sequential and interim analyses)
     + allows for early stopping of trial based on "futility"
@@ -49,10 +50,6 @@ set.seed(123)
 sim_df <- multi_sim(100, 10^3, 100, 1.5, 5)
 # sim_list <- lapply(1:100, function(x) sim_pop(10^3, 100, 1.5, 5))
 # sim_df <- bind_rows(sim_list, .id = "simulation")
-
-sim_df %>% ggplot() + 
-  geom_line(aes(x = time, y = pop, group = simulation), alpha = 0.5) + 
-  theme_minimal()
 ```
 
 ```{r}
@@ -136,12 +133,6 @@ delay_df <-
          median_delay = median(delay),
          p20_delay = quantile(delay, probs = 0.2),
          p80_delay = quantile(delay, probs = 0.8))
-
-ggplot(delay_df) + 
-  geom_bar(aes(x = delay)) +
-  geom_vline(aes(xintercept = mean_delay)) +
-  geom_vline(aes(xintercept = median_delay), linetype = "dashed")
-  
 ```
 
 ```{r sensitivity_setup, cache = TRUE}
@@ -160,7 +151,7 @@ sensitivity_list <- lapply(seq_along(trends),
 sens_df <- bind_rows(sensitivity_list)
 ```
 
-```{r plot_sens_time_series, eval = FALSE}
+```{r plot_sens_time_series, eval = FALSE, echo = FALSE}
 sens_df %>%
   ggplot() +
   geom_line(aes(x = time, y = pop, group = simulation)) +
@@ -185,7 +176,63 @@ sens_sprt <-
                               sprt < b ~ "H0"))
 ```
 
-```{r}
+```{r summarize_sens_delay, echo = FALSE}
+sens_delay <- 
+  sens_sprt %>% ungroup() %>%
+  group_by(simulation, trend, sd) %>%
+  summarize(delay = unique(detect_index(decision, is_h1))) %>%
+  ungroup() %>% group_by(trend, sd) %>%
+  mutate(mean_delay = mean(delay),
+         median_delay = median(delay),
+         p20_delay = quantile(delay, probs = 0.2),
+         p80_delay = quantile(delay, probs = 0.8),
+         max_delay = max(delay))
+```
 
+```{r plot_example, out.width = "50%", fig.show = "hold", echo = FALSE}
+# plot example simulations
+sim_df %>% ggplot() + 
+  geom_line(aes(x = time, y = pop, group = simulation), alpha = 0.5) + 
+  labs(title = "a. Simulated examples of linear population trend",
+       y = "Population size",
+       x = "Time") +
+  my_theme()
+
+# plot distribution of time that trend was detected
+ggplot(delay_df) + 
+  geom_bar(aes(x = delay)) +
+  labs(title = "b. Distribution of trend detection times",
+       y = "Frequency",
+       x = "Time") +
+  my_theme()
+  #geom_vline(aes(xintercept = mean_delay)) +
+  #geom_vline(aes(xintercept = median_delay), linetype = "dashed")
+```
+
+
+```{r plot_sens_delay, out.width="50%", fig.show = "hold", echo = FALSE}
+line_width  <- 1.5
+sens_delay %>%
+  filter(sd == 5) %>%
+  ggplot() +
+  geom_line(aes(x = trend, y = mean_delay), linetype = "solid", size = line_width) +
+  geom_line(aes(x = trend, y = p80_delay), linetype = "dashed", size = line_width) +
+  geom_line(aes(x = trend, y = max_delay), linetype = "dotted", size = line_width) +
+  lims(y = c(0, 50)) +
+  labs(title = "c. Effect of trend strength on detection time",
+       x = "Trend strength (slope coefficient)", y = "Time to detection") +
+  my_theme()
+  
+
+sens_delay %>%
+  filter(trend == 1.5) %>%
+  ggplot() +
+  geom_line(aes(x = sd, y = mean_delay), linetype = "solid", size = line_width) +
+  geom_line(aes(x = sd, y = p80_delay), linetype = "dashed", size = line_width) +
+  geom_line(aes(x = sd, y = max_delay), linetype = "dotted", size = line_width) +
+  lims(y = c(0, 50)) +
+  labs(title = "d. Effect of population variability on detection time",
+       x = "Population variability (sd)", y = "Time to detection") +
+  my_theme()
 ```
 
