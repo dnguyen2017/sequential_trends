@@ -132,14 +132,15 @@ delay_df <-
   mutate(mean_delay = mean(delay),
          median_delay = median(delay),
          p20_delay = quantile(delay, probs = 0.2),
-         p80_delay = quantile(delay, probs = 0.8))
+         p80_delay = quantile(delay, probs = 0.8),
+         p90_delay = quantile(delay, probs = 0.9))
 ```
 
 ```{r sensitivity_setup, cache = TRUE}
 # sensitivity analysis following Fig. 1 c-d in White 2019
 set.seed(123)
-trend_var <- seq(1, 3, by = 0.5)
-sd_var <- 1:6
+trend_var <- seq(1, 3, by = 0.2)
+sd_var <- seq(1, 6, by = 0.5)
 trend_cst <- rep(1.5, length = length(sd_var))
 sd_cst <- rep(5, length = length(trend_var))
 
@@ -186,6 +187,7 @@ sens_delay <-
          median_delay = median(delay),
          p20_delay = quantile(delay, probs = 0.2),
          p80_delay = quantile(delay, probs = 0.8),
+         p90_delay = quantile(delay, probs = 0.9),
          max_delay = max(delay))
 ```
 
@@ -240,9 +242,11 @@ ggplot(delay_df) +
   labs(title = "b. Distribution of trend detection times",
        y = "Frequency",
        x = "Time") +
+  geom_vline(aes(xintercept = mean_delay), size = 1.5) +
+  geom_vline(aes(xintercept = p80_delay), linetype = "dashed", size = 1.5) +
+  geom_vline(aes(xintercept = p90_delay), linetype = "dotdash", size = 1.5) +
   my_theme()
-  #geom_vline(aes(xintercept = mean_delay)) +
-  #geom_vline(aes(xintercept = median_delay), linetype = "dashed")
+  
 ```
 
 
@@ -253,6 +257,7 @@ sens_delay %>%
   ggplot() +
   geom_line(aes(x = trend, y = mean_delay), linetype = "solid", size = line_width) +
   geom_line(aes(x = trend, y = p80_delay), linetype = "dashed", size = line_width) +
+  geom_line(aes(x = trend, y = p90_delay), linetype = "dotdash", size = line_width) +
   geom_line(aes(x = trend, y = max_delay), linetype = "dotted", size = line_width) +
   lims(y = c(0, 50)) +
   labs(title = "c. Effect of trend strength on detection time",
@@ -265,6 +270,7 @@ sens_delay %>%
   ggplot() +
   geom_line(aes(x = sd, y = mean_delay), linetype = "solid", size = line_width) +
   geom_line(aes(x = sd, y = p80_delay), linetype = "dashed", size = line_width) +
+  geom_line(aes(x = sd, y = p90_delay), linetype = "dotdash", size = line_width) +
   geom_line(aes(x = sd, y = max_delay), linetype = "dotted", size = line_width) +
   lims(y = c(0, 50)) +
   labs(title = "d. Effect of population variability on detection time",
@@ -276,21 +282,24 @@ For panels c and d:
 
 * solid = mean detection time
 * dashed = 80^th^ percentile of detection time
+* dot-dash = 90^th^ percentile of detection time
 * dotted = maximum detection time
     
 ## Initial impressions
 
-1. Effect of trend strength on detection
-    + On average, the sequential test requires fewer samples than the fixed-sample procedure (Fig. 1 c.solid line). This is also true of the 80^th^ percentile run length for smaller trend strengths, the run length is similar to the fixed-sample approach when the trend is strong.
-    + Interestingly, the longest run lengths of the sequential test appear to be similiar to the minimum samples needed under the fixed-sample approach. (With the caveat that more extreme values of the maximum run length are likely to appear for larger numbers of simulations. For this simple model, the maximum run length may have been calculated analytically [at least for simple hypothesis situation])
-    
-2. Effect of population variability on detection
-    + The average run length was comparable or less than the minimum sample size needed for the fixed-sample approach. They appear to be the same for lower variability, but the number of samples needed as variability increases grows more slowly for the sequential approach than the fixed-sample approach.
-    + The maximum run length appears to grow more slowly than the minimum sample size needed under the fixed sample approach.
-    + note, that the current sequential test I'm using includes the true population variability as a parameter. So, the test would likely perform worse (more similar to  fixed sample procedure) if variability was unknown and needed to be estimated.
+On average, the SGLRT detects trends faster than the fixed-sample size test. While the maximum sample size under SGLRT can be similar or much larger than the fixed-sample size, this appears to be rare judging by the 90^th^ percentile detection times.
+
+<!-- 1. Effect of trend strength on detection -->
+<!--     + On average, the sequential test requires fewer samples than the fixed-sample procedure (Fig. 1 c.solid line). This is also true of the 80^th^ percentile run length for smaller trend strengths, the run length is similar to the fixed-sample approach when the trend is strong. -->
+<!--     + Interestingly, the longest run lengths of the sequential test appear to be similiar to the minimum samples needed under the fixed-sample approach. (With the caveat that more extreme values of the maximum run length are likely to appear for larger numbers of simulations. For this simple model, the maximum run length may have been calculated analytically [at least for simple hypothesis situation]) -->
+
+<!-- 2. Effect of population variability on detection -->
+<!--     + The average run length was comparable or less than the minimum sample size needed for the fixed-sample approach. They appear to be the same for lower variability, but the number of samples needed as variability increases grows more slowly for the sequential approach than the fixed-sample approach. -->
+<!--     + The maximum run length appears to grow more slowly than the minimum sample size needed under the fixed sample approach. -->
+<!--     + note, that the current sequential test I'm using includes the true population variability as a parameter. So, the test would likely perform worse (more similar to  fixed sample procedure) if variability was unknown and needed to be estimated. -->
     
 ## Takeaways
-Sequential testing approaches may out-perform a common method that is used to detect population trends and for power analyses to determine sample sizes for monitoring design. If the promise of these preliminary results holds up, introducing sequential approaches to population monitoring and trend detection would have an important impact on research practices for conservation management,
+Sequential testing approaches on average out-perform a common method that is used to detect population trends and for power analyses to determine sample sizes for monitoring design. If the promise of these preliminary results holds up, introducing sequential approaches to population monitoring and trend detection would have an important impact on research practices for conservation management,
 
 # extensions
 
