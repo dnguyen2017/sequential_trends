@@ -72,7 +72,7 @@ likelihood <- function (x_prev, x_now, sd, interval = c(), guess = 1.5) {
 }
 
 # sequential test functions
-calc_sr <- function(data, sd, accept_reg = c(0,0), reject_reg = c(0, 5)) {
+calc_sr <- function(data, accept_reg = c(0,0), reject_reg = c(0, 5)) {
   
   # initialize empty columns for likelihood calculations
   data$lik0 <- NA
@@ -98,6 +98,7 @@ calc_sr <- function(data, sd, accept_reg = c(0,0), reject_reg = c(0, 5)) {
     # observed states and known pars
     x0 <- unlist(data[i-1, "pop"])
     x1 <- unlist(data[i, "pop"])
+    sd <- unlist(data[i, "sd"])
     
     # likelihood calculation
     data[i,"lik0"] <- dnorm(x = x1, mean = x0, sd = sd) # H0: x_t+1 ~ N(x_t, sd)
@@ -164,5 +165,11 @@ sens_df %>%
   ggplot() +
   geom_line(aes(x = time, y = pop, group = simulation)) +
   facet_wrap(~interaction(sd, trend) )
+```
+
+```{r}
+# sprt calculations
+
+
 ```
 
