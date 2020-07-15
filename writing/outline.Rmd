@@ -87,8 +87,6 @@ for (i in seq_along(lm_list)) {
   current_ts <- sim_df %>% filter(simulation == i)
   
   # fit lm to all subsets t \in {{1,2}, {1,2,3}, {1,2,3,4} ...} in current_ts and extract slope est and pval
-  correct_inference <- function(x) 
-  
   for (j in 2:nrow(current_ts)) {
   lm_fit <- lm(pop ~ time, data = current_ts[1:j,])
   current_ts[j, "trend_est"] <- get_slope(lm_fit)
@@ -131,7 +129,9 @@ lm_df %>%
 # find minimum time to get a slope estimate that is significant (p <= 0.05) and the correct sign
 lm_df %>%
   group_by(simulation) %>%
-  summarize(min_time = detect_index(correct_inference, isTRUE))
+  summarize(min_time = detect_index(correct_inference, isTRUE)) %>%
+  ggplot() +
+  geom_histogram(aes(x = min_time), binwidth = 1)
 
 ```
 
