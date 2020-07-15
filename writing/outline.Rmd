@@ -11,6 +11,19 @@ output:
 knitr::opts_chunk$set(echo = FALSE)
 library(tidyverse)
 my_theme <- function(...) theme_minimal(base_size = 15) 
+
+# Created by Easton White
+# Created on 17-Jan-2017
+# Last edited on 18-Jan-2017
+
+# this is a function to create a list of all possible sub samples of a time series. For example, a time series of length ten could have 9 possible 2 year continuous subsamples, 8 possible, 3 year continuous subsamples, and so forth until 1 possible 10 year subsample
+create_subsamples = function(pop){
+  subsamples=list()
+  for (n in 1:(length(pop)-1)){
+    subsamples[[n]] = ldply(1:length(pop), function(x){pop[x:(x+n)]})
+  }
+  return(subsamples)
+}  
 ```
 
 # Intro
@@ -51,6 +64,45 @@ sim_df <- multi_sim(100, 10^3, 100, 1.5, 5)
 # sim_list <- lapply(1:100, function(x) sim_pop(10^3, 100, 1.5, 5))
 # sim_df <- bind_rows(sim_list, .id = "simulation")
 ```
+
+```{r}
+test <- sim_df %>% filter(simulation == 1) 
+
+lm_list <- vector("list", length = 100)
+
+for (i in seq_along(lm_list)) {
+  # create empty cols for pval and trend estimate
+  sim_df$pval <- NA
+  sim_df$trend_est <- NA
+  
+  # grab current time series
+  current_ts <- sim_df %>% filter(simulation == i)
+  
+  # fit lm to all subsets t \in {{1,2}, {1,2,3}, {1,2,3,4} ...} in current_ts and extract slope est and pval
+  for (j in 2:nrow(current_ts)) {
+  lm_fit <- lm(pop ~ time, data = current_ts[1:j,])
+  current_ts[j, "trend_est"] <- get_slope(lm_fit)
+  current_ts[j, "pval"] <- get_pval(lm_fit)
+}
+  # save calculated values
+  lm_list[[i]] <- current_ts
+  
+}
+
+lm_df <- bind_rows(lm_list)
+
+test_mod <- lm(pop ~ time, data = test[1:2,])
+get_pval <- function(model) {
+  return(summary(model)$coefficients[2,4])
+}
+get_slope <- function(model) {
+  return(model$coefficients[2])
+}
+
+
+
+```
+
 
 ```{r}
 # one sided sprt calculation
