@@ -73,61 +73,120 @@ get_slope <- function(model) {
   return(model$coefficients[2])
 }
 
-
-# pre-allocate a list to store dfs
-lm_list <- vector("list", length = 100)
-
-# fit lm and extract slope estimates and p-values
-for (i in seq_along(lm_list)) {
-  # create empty cols for pval and trend estimate
-  sim_df$pval <- NA
-  sim_df$trend_est <- NA
+calc_lm <- function (data, nsim) {
+  # pre-allocate a list to store dfs
+  lm_list <- vector("list", length = nsim)
   
-  # grab current time series
-  current_ts <- sim_df %>% filter(simulation == i)
+  # fit lm and extract slope estimates and p-values
+  for (i in seq_along(lm_list)) {
+    # create empty cols for pval and trend estimate
+    data$pval <- NA
+    data$trend_est <- NA
+    
+    # grab current time series
+    current_ts <- data %>% filter(simulation == i)
+    
+    # fit lm to all subsets t \in {{1,2}, {1,2,3}, {1,2,3,4} ...} in current_ts and extract slope est and pval
+    for (j in 2:nrow(current_ts)) {
+      lm_fit <- lm(pop ~ time, data = current_ts[1:j,])
+      current_ts[j, "trend_est"] <- get_slope(lm_fit)
+      current_ts[j, "pval"] <- get_pval(lm_fit)
+    }
+    # save calculated values
+    lm_list[[i]] <- current_ts
+    
+  }
   
-  # fit lm to all subsets t \in {{1,2}, {1,2,3}, {1,2,3,4} ...} in current_ts and extract slope est and pval
-  for (j in 2:nrow(current_ts)) {
-  lm_fit <- lm(pop ~ time, data = current_ts[1:j,])
-  current_ts[j, "trend_est"] <- get_slope(lm_fit)
-  current_ts[j, "pval"] <- get_pval(lm_fit)
+  return(bind_rows(lm_list))
 }
-  # save calculated values
-  lm_list[[i]] <- current_ts
-  
-}
 
-lm_df <- bind_rows(lm_list)
+# # pre-allocate a list to store dfs
+# lm_list <- vector("list", length = 100)
+# 
+# # fit lm and extract slope estimates and p-values
+# for (i in seq_along(lm_list)) {
+#   # create empty cols for pval and trend estimate
+#   sim_df$pval <- NA
+#   sim_df$trend_est <- NA
+#   
+#   # grab current time series
+#   current_ts <- sim_df %>% filter(simulation == i)
+#   
+#   # fit lm to all subsets t \in {{1,2}, {1,2,3}, {1,2,3,4} ...} in current_ts and extract slope est and pval
+#   for (j in 2:nrow(current_ts)) {
+#   lm_fit <- lm(pop ~ time, data = current_ts[1:j,])
+#   current_ts[j, "trend_est"] <- get_slope(lm_fit)
+#   current_ts[j, "pval"] <- get_pval(lm_fit)
+# }
+#   # save calculated values
+#   lm_list[[i]] <- current_ts
+#   
+# }
+# 
+# lm_df <- bind_rows(lm_list)
 
+# lm_df <- calc_lm(sim_df, nsim = 100)
 
-lm_df <- 
-  lm_df %>%
-  mutate(significant = ifelse(pval <= 0.05, TRUE, FALSE),
+get_conclusion <- function(data, sig_level) {
+  data %>% 
+    mutate(significant = ifelse(pval <= sig_level, TRUE, FALSE),
          correct_sign = ifelse(sign(trend_est) == sign(trend), TRUE, FALSE),
          correct_inference = ifelse(significant == TRUE & correct_sign == TRUE, TRUE, FALSE),
          type_error = case_when(correct_sign == FALSE & significant == FALSE ~ "insignificant_false",
                                 correct_sign == FALSE & significant == TRUE ~ "significant_false",
                                 correct_sign == TRUE & significant == FALSE ~ "insignificant_true",
-                                correct_sign == TRUE & significant == TRUE ~ "significant_true"))
+                                correct_sign == TRUE & significant == TRUE ~ "significant_true")) %>%
+    return()
+}
+
+# lm_df <- get_conclusion(lm_df, sig_level = 0.05)
+
+# lm_df <- 
+#   lm_df %>%
+#   mutate(significant = ifelse(pval <= 0.05, TRUE, FALSE),
+#          correct_sign = ifelse(sign(trend_est) == sign(trend), TRUE, FALSE),
+#          correct_inference = ifelse(significant == TRUE & correct_sign == TRUE, TRUE, FALSE),
+#          type_error = case_when(correct_sign == FALSE & significant == FALSE ~ "insignificant_false",
+#                                 correct_sign == FALSE & significant == TRUE ~ "significant_false",
+#                                 correct_sign == TRUE & significant == FALSE ~ "insignificant_true",
+#                                 correct_sign == TRUE & significant == TRUE ~ "significant_true"))
 
 suff_power <- function(x) x >= 80
 
-lm_df %>%
-  group_by(time) %>%
-  count(type_error) %>%
-  filter(type_error == "significant_true") %>%
-  ungroup() %>%
-  mutate(time_power = ifelse(n >= 80, time, NA),
-         mintime = min(time_power, na.rm = TRUE)) %>%
-  filter(time > 2) %>%
+get_power <- function(data, power_level = 0.8, nsim) {
+  data %>%
+    group_by(time) %>%
+    count(type_error) %>%
+    filter(type_error == "significant_true") %>%
+    ungroup() %>%
+    mutate(time_power = ifelse(n >= nsim * power_level, time, NA),
+           mintime = min(time_power, na.rm = TRUE)) %>%
+    select(-time_power) %>%
+    return()
+}
+
+lm_conclusions <- calc_lm(sim_df, nsim = 100) %>% get_conclusion(sig_level = 0.05)
+lm_power <- lm_conclusions %>% get_power(nsim = 100)
+
+# lm_df %>%
+#   group_by(time) %>%
+#   count(type_error) %>%
+#   filter(type_error == "significant_true") %>%
+#   ungroup() %>%
+#   mutate(time_power = ifelse(n >= 80, time, NA),
+#          mintime = min(time_power, na.rm = TRUE)) %>%
+#   filter(time > 2) %>%
+lm_power %>%
   ggplot() +
   geom_line(aes(x = time, y = n/100, col = type_error)) +
   geom_hline(aes(yintercept = 80/100), linetype = "dashed") +
   geom_vline(aes(xintercept = mintime), linetype = "dashed")
 
 
+
 # find minimum time to get a slope estimate that is significant (p <= 0.05) and the correct sign
-lm_df %>%
+lm_conclusions %>%
+#lm_df %>%
   group_by(simulation) %>%
   summarize(min_time = detect_index(correct_inference, isTRUE)) %>%
   ggplot() +
