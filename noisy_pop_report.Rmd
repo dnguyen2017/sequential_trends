@@ -1,0 +1,39 @@
+---
+title: "population dynamics with process and observation noise"
+author: "David Nguyen"
+date: "July 29, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("noisy_pop_scripts.R", local = knitr::knit_global())
+```
+
+
+```{r}
+# out <- sim_pop(xinit = log(1000),
+#            lambda = 2.4,
+#            b = 0.65,
+#            phi = 0,
+#            sd_proc = sqrt(0.01),
+#            sd_obs = sqrt(0.4),
+#            tfinal = 50,
+#            nsim = 1)
+
+pars <- set_params(log(1000), 2.4, b = 0.65, phi = c(0, 0, 0.5), sd_proc = c(sqrt(0.01), sqrt(0.4), sqrt(0.4)), sd_obs = sqrt(0.4))
+
+out <- multi_sim_pop(pars, tfinal=50, nsim = 1)
+
+alpha_val <- 1
+
+ggplot(out) +
+  geom_line(aes(x = time, y = log_x, group = sim), alpha = alpha_val, col = "red") +
+  geom_line(aes(x = time, y = log_y, group = sim), alpha = alpha_val) +
+  geom_point(aes(x = time, y = log_y, group = sim), size = 2, alpha = alpha_val) +
+  facet_wrap(~par, nrow = 3) +
+  ylim(3.5,9.5) +
+  theme_minimal() +
+  labs()
+```
+
