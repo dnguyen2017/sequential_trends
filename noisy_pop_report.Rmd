@@ -8,6 +8,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(broom)
 source("noisy_pop_scripts.R", local = knitr::knit_global())
 ```
 
@@ -70,6 +71,8 @@ We will use the stochastic Gompertz model with observation error and autocorrela
 \end{align*}
 
 The process model is an $ARMA(1,1)$ model where $\epsilon$ is the moving average and $b$ is the first-order autoregressive component.
+
+To verify this, we can simulate the model and estimate its coefficients. Here we can see out estimates are consistent with out interpretation of the model: $ar_1 \sim b = 0.65$ and the moving average is near 0 since there is no trend in out simulations.
 ```{r}
 fit <-
   out2 %>%
@@ -79,6 +82,23 @@ fit <-
 
 fit$coef
 
+arma_fit <- 
+  out2 %>%
+  group_by(sim) %>%
+  mutate(modfit = list(broom::tidy(arima(x = log_y, order = c(1L, 0L, 1L))))) %>% # use broom to extract arma estimates as tibble
+  unnest(cols = c(modfit)) %>%
+  group_by(sim, term) %>%
+  summarize(estimate = mean(estimate), # get estimates for each simulation
+            std.error = mean(std.error))
 
+arma_fit %>%
+  ggplot() +
+  geom_point(aes(x = term, y = estimate, shape = term))
+
+arma_fit %>%
+  group_by(term) %>%
+  summarize(estimate = mean(estimate))
+  
+  
 ```
 
