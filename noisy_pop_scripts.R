@@ -27,7 +27,7 @@ sim_pop <- function (xinit,     # initial log population size
     for (j in 2:tfinal) {
       proc_error <- phi * proc_error + rnorm(n = 1, mean = 0, sd = sd_proc)
       log_x[j] <- lambda + b * log_x[j-1] + proc_error
-      log_y[j] <- log_x[j] + rnorm(n = 1, mean = 0, sd = sd_proc)
+      log_y[j] <- log_x[j] + rnorm(n = 1, mean = 0, sd = sd_obs)
     }
     # save current simulation
     sim_list[[i]] <- (tidyr::tibble(time = 1:tfinal,
@@ -54,7 +54,9 @@ multi_sim_pop <- function (params, tfinal, nsim) {
                           sim_pop(xinit = xinit, lambda = lambda, b = b, phi = phi, sd_proc = sd_proc, sd_obs = sd_obs,
                              tfinal = tfinal, nsim = nsim)
                             )
-    sim_list[[i]]$par <- rep(paste(round(pars[i,], 2), collapse = ", "), times = nrow(sim_list[[i]]))
+    # add char col with param values
+    par_label <- paste(names(params[i,]), "=", round(params[i,], 2), collapse = ",")
+    sim_list[[i]]$par <- rep(par_label, times = nrow(sim_list[[i]]))  #rep(paste(round(params[i,], 2), collapse = ", "), times = nrow(sim_list[[i]]))
   }
   return(dplyr::bind_rows(sim_list))
 }
