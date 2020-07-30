@@ -7,6 +7,7 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
 source("noisy_pop_scripts.R", local = knitr::knit_global())
 ```
 
@@ -32,8 +33,52 @@ ggplot(out) +
   geom_line(aes(x = time, y = log_y, group = sim), alpha = alpha_val) +
   geom_point(aes(x = time, y = log_y, group = sim), size = 2, alpha = alpha_val) +
   facet_wrap(~par, nrow = 3) +
-  ylim(3.5,9.5) +
+  #ylim(3.5,9.5) +
   theme_minimal() +
   labs()
+
+ggplot(out) +
+  geom_line(aes(x = time, y = exp(log_x), group = sim), alpha = alpha_val, col = "red") +
+  geom_line(aes(x = time, y = exp(log_y), group = sim), alpha = alpha_val) +
+  geom_point(aes(x = time, y = exp(log_y), group = sim), size = 2, alpha = alpha_val) +
+  facet_wrap(~par, nrow = 3) +
+  #ylim(3.5,9.5) +
+  theme_minimal() +
+  labs()
+```
+
+```{r}
+out2 <- sim_pop(log(1000), 2.4, b = 0.65, phi = 0.5, sd_proc = 0.1, sd_obs = 0.1, nsim = 5, tfinal = 50)
+
+ggplot(out2) +
+  geom_line(aes(x = time, y = exp(log_x), group = sim), alpha = alpha_val, col = "red") +
+  geom_line(aes(x = time, y = exp(log_y), group = sim), alpha = alpha_val) +
+  geom_point(aes(x = time, y = exp(log_y), group = sim), size = 2, alpha = alpha_val) +
+  #facet_wrap(~par, nrow = 3) +
+  #ylim(3.5,9.5) +
+  theme_minimal() +
+  labs()
+```
+
+We will use the stochastic Gompertz model with observation error and autocorrelated process error. 
+
+\begin{align*}
+\ln (X_{t+1}) &= \lambda + b (\ln (X_t) ) + \epsilon_t \\
+\ln (Y_{t}) &= \ln(X+{t}) + \delta_t \\
+\epsilon_t    &\sim \phi \epsilon_{t-1} + N(0, \sigma^2_p) \\
+\delta_t      &\sim N(0, \sigma^2_o)
+\end{align*}
+
+The process model is an $ARMA(1,1)$ model where $\epsilon$ is the moving average and $b$ is the first-order autoregressive component.
+```{r}
+fit <-
+  out2 %>%
+  filter(sim == 1) %>%
+  pull(log_y) %>%
+  arima(order = c(1L, 0L, 1L))
+
+fit$coef
+
+
 ```
 
