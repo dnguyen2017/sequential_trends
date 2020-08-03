@@ -54,6 +54,12 @@ sim_lin_proc <- function (x0, t, trend, sd) {
   return(tibble(time = 1:t, pop = pop, trend = trend_val, sd = sd_val))
 }
 
+obs_model <- function (x, sd) {
+  # normal and unbiased observation noise
+  obs <- x + rnorm(n = length(x), mean = 0, sd = sd)
+  return(obs)
+}
+
 multi_sim <- function(nsim, x0, t, trend, sd) {
   simulations <- lapply(1:nsim, function(x) sim_lin_proc(x0, t, trend, sd))
  return(bind_rows(simulations, .id = "simulation") %>% mutate(simulation = as.numeric(simulation)))
