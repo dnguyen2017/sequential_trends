@@ -72,6 +72,14 @@ run_stat <- function(x) {
 #out %>% ggplot() + geom_line(aes(x = id, y = mu_mle))
 #run_stat(rnorm(1000))
 
+## helpers for seq_lm
+get_pval <- function(model) {
+  return(summary(model)$coefficients[2,4])
+}
+get_slope <- function(model) {
+  return(model$coefficients[2])
+}
+
 # fixed sample size method for trend
 seq_lm <- function (data, nsim) {
   # pre-allocate a list to store dfs
@@ -116,7 +124,7 @@ likelihood <- function (x_prev, x_now, sd, interval = c(), guess = 1.5) {
 }
 
 # sequential test functions
-calc_sr <- function(data, accept_reg = c(0,0), reject_reg = c(0, 5)) {
+calc_sr <- function(data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est) {
   
   # initialize empty columns for likelihood calculations
   data$lik0 <- NA
@@ -142,7 +150,10 @@ calc_sr <- function(data, accept_reg = c(0,0), reject_reg = c(0, 5)) {
     # observed states and known pars
     x0 <- unlist(data[i-1, "pop"])
     x1 <- unlist(data[i, "pop"])
-    sd <- unlist(data[i, "sd"])
+    sd <- unlist(data[i, sd_est])
+    
+    # if estimate of sd is invalid skip calculation
+    if(is.na(sd) == TRUE || sd <= 0) next
     
     # likelihood calculation
     data[i,"lik0"] <- dnorm(x = x1, mean = x0, sd = sd) # H0: x_t+1 ~ N(x_t, sd)
