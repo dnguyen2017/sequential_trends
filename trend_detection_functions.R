@@ -1,6 +1,34 @@
 # linear trend detection
 
-### helper functions
+### simulation functions
+
+# linear population trend model w/ normal process error
+sim_lin_proc <- function (x0, t, trend, sd) {
+  # allow for constant trend or vector of varying trends (automatically recycles vector if lenght(trend) < t)
+  trend_val = rep(trend, length = t)
+  sd_val = rep(sd, length = t)
+  
+  pop <- vector("numeric", length = t)
+  pop[1] <- x0
+  for (i in 1:(length(pop) - 1)) {
+    pop[i + 1] <- rnorm(1, pop[i] + trend_val[i], sd_val[i])
+  }
+  return(tibble(time = 1:t, pop = pop, trend = trend_val, sd = sd_val))
+}
+
+# add normal and unbiased observation noise to a population time series
+obs_model <- function (x, sd) {
+  obs <- x + rnorm(n = length(x), mean = 0, sd = sd)
+  return(obs)
+}
+
+# simulate sim_lin_proc nsim times using common parameters
+multi_sim <- function(nsim, x0, t, trend, sd) {
+  simulations <- lapply(1:nsim, function(x) sim_lin_proc(x0, t, trend, sd))
+  return(bind_rows(simulations, .id = "simulation") %>% mutate(simulation = as.numeric(simulation)))
+}
+
+### analysis functions
 
 # running calculation for mle estimates of normal R.V.s
 
