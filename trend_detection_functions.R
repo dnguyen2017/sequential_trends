@@ -53,7 +53,7 @@ run_stat <- function(x) {
   }
   
   # return: id = observation number, obs = observation value, mu_mle, sd_mle, sd_corrected
-  return(tidyr::tibble(x, mu_mle = m_, sd_mle, sd_corrected = sd_) %>% tibble::rowid_to_column(var = "id"))
+  return(tidyr::tibble(x, mu_mle = m_, sd_mle, sd_corrected = sd_)) # %>% tibble::rowid_to_column(var = "id"))
 }
 
 #out %>% ggplot() + geom_line(aes(x = id, y = mu_mle))
