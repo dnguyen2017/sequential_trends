@@ -57,4 +57,32 @@ run_stat <- function(x) {
 }
 
 #out %>% ggplot() + geom_line(aes(x = id, y = mu_mle))
-run_stat(rnorm(1000))
+#run_stat(rnorm(1000))
+
+# fixed sample size method for trend
+seq_lm <- function (data, nsim) {
+  # pre-allocate a list to store dfs
+  lm_list <- vector("list", length = nsim)
+  
+  # fit lm and extract slope estimates and p-values
+  for (i in seq_along(lm_list)) {
+    # create empty cols for pval and trend estimate
+    data$pval <- NA
+    data$trend_est <- NA
+    
+    # grab current time series
+    current_ts <- data %>% filter(simulation == i)
+    
+    # fit lm to all subsets t \in {{1,2}, {1,2,3}, {1,2,3,4} ...} in current_ts and extract slope est and pval
+    for (j in 2:nrow(current_ts)) {
+      lm_fit <- lm(pop ~ time, data = current_ts[1:j,])
+      current_ts[j, "trend_est"] <- get_slope(lm_fit)
+      current_ts[j, "pval"] <- get_pval(lm_fit)
+    }
+    # save calculated values
+    lm_list[[i]] <- current_ts
+    
+  }
+  
+  return(bind_rows(lm_list))
+}
