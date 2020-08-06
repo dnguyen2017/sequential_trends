@@ -45,7 +45,7 @@ sim_lin_proc <- function (x0, t, trend, sd, runstat = TRUE) {
   if(runstat == TRUE){
     out$diff_1 <- out$pop - lag(out$pop)
     running_stats <- run_stat(diff(out$pop))
-    out <- dplyr::left_join(out, running_stats)
+    out <- dplyr::left_join(out, running_stats, by = "diff_1")
   }
   return(out)
   #return(tibble(time = 1:t, pop = pop, trend = trend_val, sd = sd_val))
@@ -237,7 +237,8 @@ is_h0 <- function(x) x == "H0"
 detection_time_est <- function (data, FUNC = is_h1) {
   data %>%
     group_by(simulation) %>%
-    summarize(delay_est = unique(detect_index(decision_est, FUNC))) %>%
+    summarize(delay_est = unique(detect_index(decision_est, FUNC)),
+              delay_est = ifelse(delay_est == 0, NA, delay_est)) %>%
     # mutate(mean_delay_est = mean(delay_est),
     #        median_delay_est = median(delay_est)) %>% #,
     #        p20_delay = quantile(delay, probs = 0.2),
@@ -249,7 +250,8 @@ detection_time_est <- function (data, FUNC = is_h1) {
 detection_time_known <- function (data, FUNC = is_h1) {
   data %>%
     group_by(simulation) %>%
-    summarize(delay_known = unique(detect_index(decision_known, FUNC))) %>%
+    summarize(delay_known = unique(detect_index(decision_known, FUNC)),
+              delay_known = ifelse(delay_known == 0, NA, delay_known)) %>%
     # mutate(mean_delay_known = mean(delay_known),
     #        median_delay_known = median(delay_known)) %>% #,
     #        p20_delay = quantile(delay, probs = 0.2),
