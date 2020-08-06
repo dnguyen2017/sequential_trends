@@ -1,0 +1,139 @@
+---
+title: "ad hoc methods for detecting population trends"
+author: "David Nguyen"
+date: "August 5, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+library(tidyverse)
+source("trend_detection_functions.R")
+```
+
+
+```{r results = FALSE}
+set.seed(123)
+numsim <- 100
+trend_ <- 1.5
+sd_ <- 5
+x0_ <- 1000
+t_ <- 100
+pop_df <- multi_sim(nsim = numsim, x0 = x0_, t = t_, trend = trend_, sd = sd_)
+#pop_df <- pop_df %>% mutate(diff_1 = pop - lag(pop))
+
+# pop_df %>% mutate(run_mean = cumSkipNA(diff_1, sum)/(time - 1), # running mean
+#                   run_var_mle = 0) %>%
+  #rowwise() %>%
+  # mutate(run_var_mle = ifelse(is.na(lag(run_mean) ) == TRUE, 0,
+  #                         lag(run_var_mle) + (diff_1 + lag(run_mean)) * (diff_1 + run_mean) ),
+  #        run_sd_mle = sqrt(run_var_mle / (time - 1)))
+
+# for (i in seq_along(pop_df)) {
+#   if (is.na(run_mean[i]) )
+# }
+
+# zoo::rollapply(pop_df$pop, width = 1, FUN = mean) %>% head()
+# 
+# stat_df <- pop_df$diff_1 %>% tail(-1) %>% run_stat()
+# 
+# left_join(pop_df,stat_df)
+
+```
+
+```{r cache = T}
+sprt_est <- 
+  pop_df %>% #group_by(simulation) %>% 
+  calc_sprt(sd_est = "sd_mle") %>%
+  rename(decision_est = decision,
+         sprt_est = sprt) %>%
+  select(-lik0, -lik1)
+
+sprt_known <- 
+  pop_df %>% #group_by(simulation) %>% 
+  calc_sprt(sd_est = "sd") %>%
+  rename(decision_known = decision,
+         sprt_known = sprt) %>%
+  select(-lik0, -lik1)
+
+sprt_df <- 
+  full_join(sprt_est, sprt_known) 
+
+delay_df <-
+  full_join(sprt_df %>% detection_time_est(),
+          sprt_df %>% detection_time_known()) %>%
+  pivot_longer(cols = -simulation, names_to = "method", values_to = "delay") %>%
+  group_by(method) %>%
+  mutate(mean_delay = mean(delay))
+```
+
+# Comparison of detection times
+
+Tests:
+
+1. fixed-sample size linear regression test
+1. sequential test ($\sigma$ known)
+1. sequential test ($\sigma$ unknown)
+    + the running MLE estimate of $\sigma$ is used to calculate the test statistic
+    + note that the MLE estimate of $\sigma$ is uncorrected (biased low)
+
+I compare the performance of the tests according to the time required to reject the null hypothesis that there is no population trend ($\alpha = 0.05, \beta=0.2$). The population data were simulated from an additive model $X_{t+1} = X_t + r + N(0,\sigma)$ with parameters $r =$ `r trend_` and $\sigma =$ `r sd_`. The population was initialized as `r x0_` individuals and was run for `r t_` time steps. `r numsim` simulations were used.
+
+```{r}
+pop_df %>%
+  ggplot() + geom_line(aes(x = time, y = pop, group = simulation)) +
+  labs(title = "simulated population times series")
+```
+
+
+
+```{r cache = T}
+samplesize_df <- 
+  pop_df %>% seq_lm(nsim = numsim) %>%
+  get_conclusion(sig_level = 0.05) %>%
+  get_power(power_level = 0.8, nsim = numsim)
+```
+
+The fixed-sample size needs `r unique(samplesize_df$mintime)` samples to achieve 0.8 power at the 0.05 significance level. In comparison, the sequential tests require `r delay_df %>% filter(method == "delay_known") %>% pull(mean_delay) %>% unique() %>% ceiling()` ($\sigma$ known) and `r delay_df %>% filter(method == "delay_est") %>% pull(mean_delay) %>% unique() %>% ceiling()` ($\sigma$ unknown). The reason that the sequential test where $\sigma$ is unknown detects the change faster than when $\sigma$ is known (for the parameters used here) is because the MLE estimate of $\sigma$ is uncorrected which biases it low. This makes the likelihood of the null smaller than it should be. The table belows shows the number of instances either sequential method required as many or more samples than the fixed-sample size test.
+
+```{r}
+samplesize <- unique(samplesize_df$mintime)
+delay_df %>% count(delay >= samplesize) %>% knitr::kable()
+
+```
+
+```{r}
+delay_df %>% 
+  ggplot() +
+  geom_histogram(aes(x = delay, fill = method), binwidth = 1) +
+  geom_vline(aes(xintercept = mean_delay, linetype = method), size = 1.5) +
+  geom_vline(aes(xintercept = mean(samplesize_df$mintime)), col = "red", size = 1.5) +
+  labs(title = "Detection times for population trend",
+       subtitle = "red line is minimum time for fixed-sample method")
+```
+
+Note, the probability models used for the fixed-sample and sequential tests are not the same. The sequential test uses the true data-generating model (variability is from process noise) whereas the fixed-sample test fits a simple linear regression using time as a covariate (observation noise). A more comparable test would be to use a sequential t-test on the first-differenced values of the population sizes. 
+
+```{r eval = FALSE}
+sprt.t.test(pop_df$diff_1[2:35], d = 1.5/5)
+```
+
+```{r eval = FALSE}
+pop_df %>%
+  ggplot() + geom_line(aes(x = time, y = pop))
+
+pop_df %>%
+  ggplot() + geom_point(aes(x = time, y = diff_1))
+
+
+```
+
+```{r eval = FALSE}
+pop_df %>%
+  ggplot() + 
+  geom_line(aes(x = time, y = sprt)) +
+  geom_point(aes(x = time, y = sprt, col = decision)) +
+  geom_hline(aes(yintercept = a)) +
+  geom_hline(aes(yintercept = b))
+```
+
