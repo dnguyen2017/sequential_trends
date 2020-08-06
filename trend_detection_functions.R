@@ -118,6 +118,30 @@ seq_lm <- function (data, nsim) {
   return(bind_rows(lm_list))
 }
 
+get_conclusion <- function(data, sig_level) {
+  data %>% 
+    mutate(significant = ifelse(pval <= sig_level, TRUE, FALSE),
+           correct_sign = ifelse(sign(trend_est) == sign(trend), TRUE, FALSE),
+           correct_inference = ifelse(significant == TRUE & correct_sign == TRUE, TRUE, FALSE),
+           type_error = case_when(correct_sign == FALSE & significant == FALSE ~ "insignificant_false",
+                                  correct_sign == FALSE & significant == TRUE ~ "significant_false",
+                                  correct_sign == TRUE & significant == FALSE ~ "insignificant_true",
+                                  correct_sign == TRUE & significant == TRUE ~ "significant_true")) %>%
+    return()
+}
+
+get_power <- function(data, power_level = 0.8, nsim) {
+  data %>%
+    group_by(time) %>%
+    count(type_error) %>%
+    filter(type_error == "significant_true") %>%
+    ungroup() %>%
+    mutate(time_power = ifelse(n >= nsim * power_level, time, NA),
+           mintime = min(time_power, na.rm = TRUE)) %>%
+    select(-time_power) %>%
+    return()
+}
+
 # one sided sprt calculation
 objfn <- function(trend, x1, x0, sd) {
   # likelihood( x1 | x0, r, dispersion )
@@ -214,8 +238,8 @@ detection_time_est <- function (data, FUNC = is_h1) {
   data %>%
     group_by(simulation) %>%
     summarize(delay_est = unique(detect_index(decision_est, FUNC))) %>%
-    mutate(mean_delay_est = mean(delay_est),
-           median_delay_est = median(delay_est)) %>% #,
+    # mutate(mean_delay_est = mean(delay_est),
+    #        median_delay_est = median(delay_est)) %>% #,
     #        p20_delay = quantile(delay, probs = 0.2),
     #        p80_delay = quantile(delay, probs = 0.8),
     #        p90_delay = quantile(delay, probs = 0.9)) %>%
@@ -226,8 +250,8 @@ detection_time_known <- function (data, FUNC = is_h1) {
   data %>%
     group_by(simulation) %>%
     summarize(delay_known = unique(detect_index(decision_known, FUNC))) %>%
-    mutate(mean_delay_known = mean(delay_known),
-           median_delay_known = median(delay_known)) %>% #,
+    # mutate(mean_delay_known = mean(delay_known),
+    #        median_delay_known = median(delay_known)) %>% #,
     #        p20_delay = quantile(delay, probs = 0.2),
     #        p80_delay = quantile(delay, probs = 0.8),
     #        p90_delay = quantile(delay, probs = 0.9)) %>%
