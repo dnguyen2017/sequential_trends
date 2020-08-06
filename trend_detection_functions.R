@@ -1,5 +1,32 @@
 # linear trend detection
 
+# running calculation for mle estimates of normal R.V.s
+
+run_stat <- function(x) {
+  # add checks here
+  
+  # init vectors for statistics
+  m_ <- vector("numeric", length = length(x)) 
+  s_ <- s2_mle <- sd_mle <- s2_ <- sd_ <- m_
+  
+  # init value of mean is x1. All other init values are 0
+  m_[1] <- x[1]
+  
+  # calculate running statistics
+  for (i in 2:length(x)) {
+    m_[i] <- m_[i-1] + (x[i] - m_[i-1])/i
+    s_[i]  <- s_[i-1] + (x[i] - m_[i-1]) * (x[i] - m_[i])
+    s2_mle[i] <- s_[i]/(i)
+    sd_mle[i] <- sqrt(s2_mle[i])
+    s2_[i] <- s_[i]/(i-1)
+    sd_[i] <- sqrt(s2_[i])
+  }
+  
+  # return: id = observation number, obs = observation value, mu_mle, sd_mle, sd_corrected
+  return(tidyr::tibble(diff_1 = x, mu_mle = m_, sd_mle, sd_corrected = sd_)) # %>% tibble::rowid_to_column(var = "id"))
+  #return(tidyr::tibble(diff_1 = c(NA,x), mu_mle = c(NA,m_), sd_mle = c(NA,sd_mle), sd_corrected = c(NA,sd_) )) # %>% tibble::rowid_to_column(var = "id"))
+}
+
 ### simulation functions
 
 # linear population trend model w/ normal process error
@@ -50,32 +77,7 @@ cumSkipNA <- function(x, FUNC)
   x
 }
 
-# running calculation for mle estimates of normal R.V.s
 
-run_stat <- function(x) {
-  # add checks here
-  
-  # init vectors for statistics
-  m_ <- vector("numeric", length = length(x)) 
-  s_ <- s2_mle <- sd_mle <- s2_ <- sd_ <- m_
-  
-  # init value of mean is x1. All other init values are 0
-  m_[1] <- x[1]
-  
-  # calculate running statistics
-  for (i in 2:length(x)) {
-    m_[i] <- m_[i-1] + (x[i] - m_[i-1])/i
-    s_[i]  <- s_[i-1] + (x[i] - m_[i-1]) * (x[i] - m_[i])
-    s2_mle[i] <- s_[i]/(i)
-    sd_mle[i] <- sqrt(s2_mle[i])
-    s2_[i] <- s_[i]/(i-1)
-    sd_[i] <- sqrt(s2_[i])
-  }
-  
-  # return: id = observation number, obs = observation value, mu_mle, sd_mle, sd_corrected
-  return(tidyr::tibble(diff_1 = x, mu_mle = m_, sd_mle, sd_corrected = sd_)) # %>% tibble::rowid_to_column(var = "id"))
-  #return(tidyr::tibble(diff_1 = c(NA,x), mu_mle = c(NA,m_), sd_mle = c(NA,sd_mle), sd_corrected = c(NA,sd_) )) # %>% tibble::rowid_to_column(var = "id"))
-}
 
 #out %>% ggplot() + geom_line(aes(x = id, y = mu_mle))
 #run_stat(rnorm(1000))
@@ -170,4 +172,64 @@ calc_sr <- function(data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est) {
   }
   
   return(data)
+}
+
+calc_sprt <- function (data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est, alpha = 0.05, beta = 0.2) {
+  
+  OUT <- data %>%
+    calc_sr(sd_est = sd_est) %>%
+    group_by(simulation) %>%
+    mutate(sprt = log(lik1/lik0) ,
+           sprt = ifelse(is.na(sprt), 0, sprt),
+           sprt = cumsum(sprt),
+           a = log( (1 - beta)/ alpha),
+           b = log(beta/(1 - alpha)),
+           decision = case_when(sprt <= a & sprt >= b ~"?",
+                                sprt > a ~ "H1",
+                                sprt < b ~ "H0"))
+  
+  # # calculate likelihoods under each hypothesis
+  # OUT <- calc_sr(data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est)
+  # # calculate sequential test statistic
+  # OUT$sprt <- log(OUT$lik1/OUT$lik0)
+  # OUT$sprt <- ifelse(is.na(OUT$sr), 0, OUT$sr) # replace NA with 0 so that I can use cumsum() to get running LR
+  # OUT$sprt <- cumsum(OUT$sprt)
+  # 
+  # # calculate decision thresholds
+  # OUT$a <- rep(log( (1 - beta)/ alpha), length = nrow(OUT))
+  # OUT$b <- rep(log(beta/(1 - alpha)), length = nrow(OUT))
+  # 
+  # # assign decision according to whether SPRT crosses a threshold
+  # OUT$decision <- ifelse(OUT$sprt <= a & OUT$sprt >= b,
+  #                        "?",
+  #                        ifelse(OUT$sprt > a, "H1", "H0"))
+  return(OUT)
+}
+
+# helper function for calculating time to decision
+is_h1 <- function(x) x == "H1"
+is_h0 <- function(x) x == "H0"
+
+detection_time_est <- function (data, FUNC = is_h1) {
+  data %>%
+    group_by(simulation) %>%
+    summarize(delay_est = unique(detect_index(decision_est, FUNC))) %>%
+    mutate(mean_delay_est = mean(delay_est),
+           median_delay_est = median(delay_est)) %>% #,
+    #        p20_delay = quantile(delay, probs = 0.2),
+    #        p80_delay = quantile(delay, probs = 0.8),
+    #        p90_delay = quantile(delay, probs = 0.9)) %>%
+    return()
+}
+
+detection_time_known <- function (data, FUNC = is_h1) {
+  data %>%
+    group_by(simulation) %>%
+    summarize(delay_known = unique(detect_index(decision_known, FUNC))) %>%
+    mutate(mean_delay_known = mean(delay_known),
+           median_delay_known = median(delay_known)) %>% #,
+    #        p20_delay = quantile(delay, probs = 0.2),
+    #        p80_delay = quantile(delay, probs = 0.8),
+    #        p90_delay = quantile(delay, probs = 0.9)) %>%
+    return()
 }
