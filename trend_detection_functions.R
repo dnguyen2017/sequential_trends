@@ -3,7 +3,7 @@
 ### simulation functions
 
 # linear population trend model w/ normal process error
-sim_lin_proc <- function (x0, t, trend, sd) {
+sim_lin_proc <- function (x0, t, trend, sd, runstat = TRUE) {
   # allow for constant trend or vector of varying trends (automatically recycles vector if lenght(trend) < t)
   trend_val = rep(trend, length = t)
   sd_val = rep(sd, length = t)
@@ -13,7 +13,15 @@ sim_lin_proc <- function (x0, t, trend, sd) {
   for (i in 1:(length(pop) - 1)) {
     pop[i + 1] <- rnorm(1, pop[i] + trend_val[i], sd_val[i])
   }
-  return(tibble(time = 1:t, pop = pop, trend = trend_val, sd = sd_val))
+  out <- tibble(time = 1:t, pop = pop, trend = trend_val, sd = sd_val)
+  
+  if(runstat == TRUE){
+    out$diff_1 <- out$pop - lag(out$pop)
+    running_stats <- run_stat(diff(out$pop))
+    out <- dplyr::left_join(out, running_stats)
+  }
+  return(out)
+  #return(tibble(time = 1:t, pop = pop, trend = trend_val, sd = sd_val))
 }
 
 # add normal and unbiased observation noise to a population time series
