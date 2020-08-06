@@ -1,7 +1,7 @@
 ---
 title: "ad hoc methods for detecting population trends"
 author: "David Nguyen"
-date: "August 5, 2020"
+date: "`r Sys.Date()`"
 output: html_document
 ---
 
@@ -103,7 +103,7 @@ delay_df %>% count(delay >= samplesize) %>% knitr::kable()
 
 ```
 
-```{r}
+```{r warning=FALSE}
 delay_df %>% 
   ggplot() +
   geom_histogram(aes(x = delay, fill = method), binwidth = 1) +
@@ -128,12 +128,15 @@ t_ <- 100
 pop_df <- multi_sim(nsim = numsim, x0 = x0_, t = t_, trend = 0, sd = sd_)
 ```
 
+How do the tests perform when there is no trend? The sequential tests would (ideally) accept the null hypothesis. The fixed-sample procedure cannot accept the null, so I will consider any non-significant p-values to indicate that the null was "accepted."
 
 ```{r}
 pop_df %>%
   ggplot() + geom_line(aes(x = time, y = pop, group = simulation)) +
   labs(title = "simulated population times series")
 ```
+
+I don't like the behavior of this model when there is no trend. The distribution isn't stationary (constant mean and variance over time) so I don't think this is a fair test.
 
 ```{r cache = T, dependson="simulation_null"}
 sprt_est <- 
@@ -188,6 +191,8 @@ delay_df %>%
        y = "frequency of false positives")
 ```
 
+All of the tests perform quite poorly. But, I think that this is more an issue with the null model. It would be better to simulate from a gompertz model at (stochastic) equilibrium to generate test data.
+
 ```{r eval = FALSE}
 # plot FPR individually
 
@@ -209,5 +214,5 @@ ggplot() +
 
 # to-dos
 
-* test performance on time-series with no trend
+* test performance on time-series with no trend (should be stationary dist'n; include burn-in time)
 * sensitivity analysis using different trends and sd
