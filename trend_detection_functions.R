@@ -198,52 +198,55 @@ calc_sr <- function(data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est) {
   return(data)
 }
 
-calc_sprt <- function (data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est, alpha = 0.05, beta = 0.2) {
-  
-  OUT <- data %>%
-    calc_sr(sd_est = sd_est) %>%
-    group_by(simulation) %>%
-    mutate(sprt = log(lik1/lik0) ,
-           sprt = ifelse(is.na(sprt), 0, sprt),
-           sprt = cumsum(sprt),
-           a = log( (1 - beta)/ alpha),
-           b = log(beta/(1 - alpha)),
-           decision = case_when(sprt <= a & sprt >= b ~"?",
-                                sprt > a ~ "H1",
-                                sprt < b ~ "H0"))
-  
-  # # calculate likelihoods under each hypothesis
-  # OUT <- calc_sr(data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est)
-  # # calculate sequential test statistic
-  # OUT$sprt <- log(OUT$lik1/OUT$lik0)
-  # OUT$sprt <- ifelse(is.na(OUT$sr), 0, OUT$sr) # replace NA with 0 so that I can use cumsum() to get running LR
-  # OUT$sprt <- cumsum(OUT$sprt)
-  # 
-  # # calculate decision thresholds
-  # OUT$a <- rep(log( (1 - beta)/ alpha), length = nrow(OUT))
-  # OUT$b <- rep(log(beta/(1 - alpha)), length = nrow(OUT))
-  # 
-  # # assign decision according to whether SPRT crosses a threshold
-  # OUT$decision <- ifelse(OUT$sprt <= a & OUT$sprt >= b,
-  #                        "?",
-  #                        ifelse(OUT$sprt > a, "H1", "H0"))
-  return(OUT)
-}
+# calc_sprt <- function (data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est, alpha = 0.05, beta = 0.2) {
+#   
+#   OUT <- data %>%
+#     calc_sr(sd_est = sd_est) %>%
+#     group_by(simulation) %>%
+#     mutate(sprt = log(lik1/lik0) ,
+#            sprt = ifelse(is.na(sprt), 0, sprt),
+#            sprt = cumSkipNA(sprt, cum),
+#            a = log( (1 - beta)/ alpha),
+#            b = log(beta/(1 - alpha)),
+#            decision = case_when(sprt <= a & sprt >= b ~"?",
+#                                 sprt > a ~ "H1",
+#                                 sprt < b ~ "H0"))
+#   
+#   # # calculate likelihoods under each hypothesis
+#   # OUT <- calc_sr(data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est)
+#   # # calculate sequential test statistic
+#   # OUT$sprt <- log(OUT$lik1/OUT$lik0)
+#   # OUT$sprt <- ifelse(is.na(OUT$sr), 0, OUT$sr) # replace NA with 0 so that I can use cumsum() to get running LR
+#   # OUT$sprt <- cumsum(OUT$sprt)
+#   # 
+#   # # calculate decision thresholds
+#   # OUT$a <- rep(log( (1 - beta)/ alpha), length = nrow(OUT))
+#   # OUT$b <- rep(log(beta/(1 - alpha)), length = nrow(OUT))
+#   # 
+#   # # assign decision according to whether SPRT crosses a threshold
+#   # OUT$decision <- ifelse(OUT$sprt <= a & OUT$sprt >= b,
+#   #                        "?",
+#   #                        ifelse(OUT$sprt > a, "H1", "H0"))
+#   return(OUT)
+# }
 
-calc_sprt_alt <- function (data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est, alpha = 0.05, beta = 0.2) {
+calc_sprt <- function (data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est, alpha = 0.05, beta = 0.2) {
   # this function calculates the log-likelhiood ratio as log(p1) - log(p0) instead of using division
-  # 2nd step of SPRT calculation now sets all +/-Inf values to 0.
+  # 2nd step of SPRT calculation now sets all NA values to 0 (we can't compare models when we don't have sd_mle yet)
+  # 3rd step of SPRT calculation sets all +/-Inf values to NA. When taking cumulative LR we skip NA values
   OUT <- data %>%
     calc_sr(sd_est = sd_est) %>%
     group_by(simulation) %>%
     mutate(sprt = log(lik1) - log(lik0) ,
-           sprt = ifelse(is.na(sprt) | sprt %in% c(-Inf,Inf), 0, sprt),
-           sprt = cumsum(sprt),
+           sprt = ifelse(is.na(sprt), 0, sprt),
+           sprt = ifelse(sprt %in% c(-Inf,Inf), NA, sprt),
+           sprt = cumSkipNA(sprt, sum),
            a = log( (1 - beta)/ alpha),
            b = log(beta/(1 - alpha)),
            decision = case_when(sprt <= a & sprt >= b ~"?",
                                 sprt > a ~ "H1",
-                                sprt < b ~ "H0"))
+                                sprt < b ~ "H0"),
+           decision = ifelse(is.na(decision), "?", decision))
   
   # # calculate likelihoods under each hypothesis
   # OUT <- calc_sr(data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est)
@@ -264,7 +267,7 @@ calc_sprt_alt <- function (data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_e
 }
 
 # helper function for calculating time to decision
-is_h1 <- function(x) x == "H1"
+is_h1 <- function(x) ifelse(x == "H1", TRUE, FALSE)
 is_h0 <- function(x) x == "H0"
 
 detection_time_est <- function (data, FUNC = is_h1) {
