@@ -87,13 +87,6 @@ delay_df <-
   mutate(mean_delay = mean(delay, na.rm = TRUE))
 ```
 
-```{r}
-sprt_df %>% filter(sprt_est %in% c(-Inf,Inf) | sprt_known %in% c(-Inf,Inf)) %>% 
-  group_by(simulation) %>% filter(time == first(time)) %>%
-  knitr::kable()
-```
-
-
 ```{r cache = T,dependson="simulation"}
 samplesize_df <- 
   pop_df %>% seq_lm(nsim = numsim) %>%
@@ -173,11 +166,6 @@ sprt_df_null %>%
   count(decision_known, name = "n_known")
 )
 ```
-```{r}
-sprt_df_null %>% filter(sprt_est %in% c(-Inf,Inf) | sprt_known %in% c(-Inf,Inf)) %>% 
-  group_by(simulation) %>% filter(time == first(time)) %>%
-  knitr::kable()
-```
 
 
 ```{r cache = T,dependson="simulation_null"}
@@ -224,6 +212,36 @@ ggplot() +
   ylim(0,100)
  
 ```
+
+# Numerical problems
+Below are tables showing the first times a simulation yields a test statistic that is +/- Inf. This (so far) only happens when using estimates of sd. As you can see, in these cases the estimates of sd are all very small. This results in likelihoods that are 0 which will mess up the calculation of the log-likelihood ratio. This is an inferential problem, because if the test statistic is ever +/- Inf, then no amount of new evidence can ever change the conclusion. So these early underestimates of sd are a problem for the sd unknown method.
+
+```{r}
+sprt_df_null %>% filter(sprt_est %in% c(-Inf,Inf) | sprt_known %in% c(-Inf,Inf)) %>% 
+  group_by(simulation) %>% filter(time == first(time)) %>%
+  knitr::kable(caption = "Infinite sprt when null is true")
+
+sprt_df %>% filter(sprt_est %in% c(-Inf,Inf) | sprt_known %in% c(-Inf,Inf)) %>% 
+  group_by(simulation) %>% filter(time == first(time)) %>%
+  knitr::kable(caption = "Infinite sprt when null is false")
+```
+
+Tried using calculating sprt as a difference of logs instead (below). Still have issue with +/- Inf values. Note, this isn't an issue for the sprt calculation when sd is known. I've noticed that all instances where the sprt %in% c(-Inf,Inf) that it is because the early estimate of sd is very small. Maybe, need to include a way to wait until estimate of sd stabilizes. 
+
+```{r}
+sprt_est_alt <- 
+  pop_df %>% #group_by(simulation) %>% 
+  calc_sprt_alt(sd_est = "sd_mle") %>%
+  rename(decision_est = decision,
+         sprt_est = sprt) #%>%
+  #select(-lik0, -lik1)
+
+sprt_est_alt %>% filter(sprt_est %in% c(-Inf,Inf)) %>% 
+  group_by(simulation) %>% filter(time == first(time)) %>%
+  knitr::kable(caption = "Infinite sprt when null is false")
+```
+
+So how should I handle cases where the likelihood when one (or both) of the hypotheses is zero? It's hard to come up with a rule for handling this, because the absolute magnitude of likelihoods is meaningless - it is the relative magnitude of likelihoods that matters. Both likelihoods tend to be very small in these cases, but it is still necessary to compare them which is challenging since they are so small.
 
 # to-dos
 
