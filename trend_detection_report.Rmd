@@ -12,7 +12,7 @@ source("trend_detection_functions.R")
 ```
 
 
-```{r simulation, results = FALSE}
+```{r simulation, cache = T, results = FALSE}
 knitr::read_chunk("trend_detection_functions.R")
 set.seed(123)
 numsim <- 100
@@ -57,7 +57,7 @@ I compare the performance of the tests according to the time required to reject 
 
 ```{r}
 pop_df %>%
-  ggplot() + geom_line(aes(x = time, y = pop, group = simulation)) +
+  ggplot() + geom_line(aes(x = time, y = pop, group = simulation), alpha = 0.2) +
   labs(title = "simulated population times series")
 ```
 
@@ -84,7 +84,13 @@ delay_df <-
           sprt_df %>% detection_time_known()) %>%
   pivot_longer(cols = -simulation, names_to = "method", values_to = "delay") %>%
   group_by(method) %>%
-  mutate(mean_delay = mean(delay))
+  mutate(mean_delay = mean(delay, na.rm = TRUE))
+```
+
+```{r}
+sprt_df %>% filter(sprt_est %in% c(-Inf,Inf) | sprt_known %in% c(-Inf,Inf)) %>% 
+  group_by(simulation) %>% filter(time == first(time)) %>%
+  knitr::kable()
 ```
 
 
@@ -109,6 +115,7 @@ delay_df %>%
   geom_histogram(aes(x = delay, fill = method), binwidth = 1) +
   geom_vline(aes(xintercept = mean_delay, linetype = method), size = 1.5) +
   geom_vline(aes(xintercept = mean(samplesize_df$mintime)), col = "red", size = 1.5) +
+  xlim(0, 30) +
   labs(title = "Detection times for population trend",
        subtitle = "red line is minimum time for fixed-sample method")
 ```
@@ -117,7 +124,7 @@ Note, the probability models used for the fixed-sample and sequential tests are 
 
 # Performance when null is true (no trend)
 
-```{r simulation_null}
+```{r simulation_null, cache=T}
 knitr::read_chunk("trend_detection_functions.R")
 set.seed(123)
 numsim <- 100
@@ -125,69 +132,75 @@ numsim <- 100
 sd_ <- 5
 x0_ <- 1000
 t_ <- 100
-pop_df <- multi_sim(nsim = numsim, x0 = x0_, t = t_, trend = 0, sd = sd_)
+pop_df_null <- multi_sim(nsim = numsim, x0 = x0_, t = t_, trend = 0, sd = sd_)
 ```
 
 How do the tests perform when there is no trend? The sequential tests would (ideally) accept the null hypothesis. The fixed-sample procedure cannot accept the null, so I will consider any non-significant p-values to indicate that the null was "accepted."
 
 ```{r}
-pop_df %>%
-  ggplot() + geom_line(aes(x = time, y = pop, group = simulation)) +
+pop_df_null %>%
+  ggplot() + geom_line(aes(x = time, y = pop, group = simulation), alpha = 0.2) +
   labs(title = "simulated population times series")
 ```
 
 I don't like the behavior of this model when there is no trend. The distribution isn't stationary (constant mean and variance over time) so I don't think this is a fair test.
 
 ```{r cache = T, dependson="simulation_null"}
-sprt_est <- 
-  pop_df %>% #group_by(simulation) %>% 
+sprt_est_null <- 
+  pop_df_null %>% #group_by(simulation) %>% 
   calc_sprt(sd_est = "sd_mle") %>%
   rename(decision_est = decision,
          sprt_est = sprt) %>%
   select(-lik0, -lik1)
 
-sprt_known <- 
-  pop_df %>% #group_by(simulation) %>% 
+sprt_known_null <- 
+  pop_df_null %>% #group_by(simulation) %>% 
   calc_sprt(sd_est = "sd") %>%
   rename(decision_known = decision,
          sprt_known = sprt) %>%
   select(-lik0, -lik1)
 
-sprt_df <- 
-  full_join(sprt_est, sprt_known) 
+sprt_df_null <- 
+  full_join(sprt_est_null, sprt_known_null) 
 
-delay_df <-
+delay_df_null <-
   full_join(
-  sprt_df %>%
+  sprt_df_null %>%
   group_by(time) %>%
   count(decision_est, name = "n_est"),
-sprt_df %>%
+sprt_df_null %>%
   group_by(time) %>%
   count(decision_known, name = "n_known")
 )
 ```
+```{r}
+sprt_df_null %>% filter(sprt_est %in% c(-Inf,Inf) | sprt_known %in% c(-Inf,Inf)) %>% 
+  group_by(simulation) %>% filter(time == first(time)) %>%
+  knitr::kable()
+```
+
 
 ```{r cache = T,dependson="simulation_null"}
-samplesize_df <- 
-  pop_df %>% seq_lm(nsim = numsim) %>%
+samplesize_df_null <- 
+  pop_df_null %>% seq_lm(nsim = numsim) %>%
   get_conclusion(sig_level = 0.05) #%>%
   #get_power(power_level = 0.8, nsim = numsim)
 
-mintime_df <-
-  samplesize_df %>% 
+mintime_df_null <-
+  samplesize_df_null %>% 
     group_by(time) %>%
     count(type_error) %>%
     filter(type_error %in% c("significant_true","significant_false") )
 ```
 
 ```{r fpr_plot}
-delay_df %>%
+delay_df_null %>%
   ggplot() +
   geom_line(aes(x = time, y = n_est, col = decision_est), size = 1.5, linetype = "solid") +
   geom_line(aes(x = time, y = n_known, col = decision_known), size = 1.5, linetype = "dashed") +
-  geom_line(data = mintime_df, aes(x = time, y = n), size = 1.5, col = "red") +
+  geom_line(data = mintime_df_null, aes(x = time, y = n), size = 1.5) +
   labs(title = "False positive rates of tests",
-       subtitle = "Solid = sd unknown; Dashed = sd known; red = fixed-sample test",
+       subtitle = "Solid = sd unknown; Dashed = sd known; black = fixed-sample test",
        y = "frequency of false positives")
 ```
 
@@ -196,15 +209,15 @@ All of the tests perform quite poorly. But, I think that this is more an issue w
 ```{r eval = FALSE}
 # plot FPR individually
 
-delay_df %>%
+delay_df_null %>%
   ggplot() +
   geom_line(aes(x = time, y = n_est, col = decision_est), size = 1.5, linetype = "solid") +
   geom_line(aes(x = time, y = n_known, col = decision_known), size = 1.5, linetype = "dashed") +
-  geom_line(data = mintime_df, aes(x = time, y = n), size = 1.5, col = "red") +
+  geom_line(data = mintime_df_null, aes(x = time, y = n), size = 1.5, col = "red") +
   labs(title = "False positive rate of sequential test",
        subtitle = "Solid = sd unknown; Dashed = sd known")
 
-mintime_df %>%  
+mintime_df_null %>%  
 ggplot() +
   geom_line(aes(x = time, y = n)) +
   labs(title = "False positive rate for fixed-sample test") +
