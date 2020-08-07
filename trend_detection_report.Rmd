@@ -45,7 +45,7 @@ pop_df <- multi_sim(nsim = numsim, x0 = x0_, t = t_, trend = trend_, sd = sd_)
 # Trend detection: sequential vs fixed sample approaches
 Managers need to detect population trends in a timely and reliable manner. Timeliness is reflected in the number of samples (e.g., years) needed to detect a trend. Reliability is captured by the type I error and power of a test.
 
-Linear regression is commonly used to detect trends in population data. For instance,
+Linear regression is commonly used to detect trends in population data. Consider a stochastic population model,
 $$ N_{t+1} \sim N(N_t + r,\sigma), $$
 Where $N_t$ is the population size at time $t$, $r$ is the population trend, and $\sigma$ is the population variability.
 
@@ -174,7 +174,7 @@ pop_df_null %>%
   labs(title = "simulated population times series")
 ```
 
-I don't like the behavior of this model when there is no trend. The distribution isn't stationary (constant mean and variance over time) so I don't think this is a fair test.
+I don't like the behavior of this model when there is no trend. The distribution isn't stationary so I don't think this is a fair test. This is a gaussian random walk which is distributed at the n^th^ time point as $\overset{n}{\Sigma} Z_i \sim  N(0,n\sigma)$ where $Z_i \overset{iid}{\sim} N(0,\sigma)$. That is, the variance is unbounded as $n \rightarrow \inf$.
 
 ```{r cache = T, dependson="simulation_null"}
 sprt_est_null <- 
