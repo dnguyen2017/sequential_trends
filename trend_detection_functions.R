@@ -232,12 +232,12 @@ calc_sprt <- function (data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est, 
 
 calc_sprt_alt <- function (data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est, alpha = 0.05, beta = 0.2) {
   # this function calculates the log-likelhiood ratio as log(p1) - log(p0) instead of using division
-  # hopefully will not return -Inf/Inf values like the other method
+  # 2nd step of SPRT calculation now sets all +/-Inf values to 0.
   OUT <- data %>%
     calc_sr(sd_est = sd_est) %>%
     group_by(simulation) %>%
     mutate(sprt = log(lik1) - log(lik0) ,
-           sprt = ifelse(is.na(sprt), 0, sprt),
+           sprt = ifelse(is.na(sprt) | sprt %in% c(-Inf,Inf), 0, sprt),
            sprt = cumsum(sprt),
            a = log( (1 - beta)/ alpha),
            b = log(beta/(1 - alpha)),
