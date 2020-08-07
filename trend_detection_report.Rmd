@@ -42,6 +42,44 @@ pop_df <- multi_sim(nsim = numsim, x0 = x0_, t = t_, trend = trend_, sd = sd_)
 
 ```
 
+# Trend detection: sequential vs fixed sample approaches
+Managers need to detect population trends in a timely and reliable manner. Timeliness is reflected in the number of samples (e.g., years) needed to detect a trend. Reliability is captured by the type I error and power of a test.
+
+Linear regression is commonly used to detect trends in population data. For instance,
+$$ N_{t+1} \sim N(N_t + r,\sigma), $$
+Where $N_t$ is the population size at time $t$, $r$ is the population trend, and $\sigma$ is the population variability.
+
+To identify the timeliness and reliability of linear regression for detecting population trends, [White (2019)](https://academic.oup.com/bioscience/article/69/1/40/5195956#129750432) repeatedly fit linear models to sub-samples of a time series to identify the minimum sample size needed to achieve a specified type I error and power. That is, for a time series with $T$ time points, he fit a linear regression model to each contiguous sub-samples of size $2, 3, \ldots, T-1$. Using the arbitrary (but conventional) benchmark of 0.8 power at the 0.05 significance level, White used the regression outputs to find the minimum sub-sample length such that 80 % of the samples had a significant regression slope coefficient. This is essentially a sample size calculation for a one-sided hypothesis test $H_0: r = 0$ vs $H_1: r > 0$.
+
+We can also test this one-sided hypothesis using a sequential test. We can define our sequential test statistic $(S)$ as:
+
+\begin{align*}
+S_0 & = 0 \\
+S_n & = \frac{P(N_{t+1} | N_t, \hat{r}, \sigma)}{P(N_{t+1} | N_t, r = 0, \sigma)}
+\end{align*}
+
+where $\hat{r}$ is the MLE of r constrained to  $r \in (0,\inf)$ or $r \in (-\inf, 0)$ depending on whether detection of a linear increase or decrease is desired. (In my computer implementation, I just use a finite interval for the constrained MLE).
+
+The decision rule is:
+
+\begin{align*}
+    \begin{cases}
+      \text{reject } H_0  & \Sigma^{n}_{r = 0} S_r > \log(A) \\
+      \text{accept } H_0 & \Sigma^{n}_{r = 0} S_r \leq \log(B) \\
+      \text{continue sampling} & \log(B)  <  \Sigma^{n}_{r = 0} S_r  \leq  \log(A)  
+    \end{cases}
+\end{align*}
+
+The thresholds are set following Wald's method such that $A \sim \frac{1-\beta}{\alpha}$ and $B \sim \frac{\beta}{1-\alpha}$ where $\alpha$ and $\beta$ is the probabilities of type I and II error, respectively.
+
+For the situation where $\sigma$ is unknown, the sequential test statistic is calculated using the current ML estimate of of the standard deviation ($\hat{\sigma}$), i.e.,
+
+\begin{align*}
+S_0 & = 0 \\
+S_n & = \frac{P(N_{t+1} | N_t, \hat{r}, \hat{\sigma})}{P(N_{t+1} | N_t, r = 0, \hat{\sigma})}
+\end{align*}
+
+$\hat{\sigma}$ is computed as a [running variance](https://www.johndcook.com/blog/standard_deviation/) from the first differences of the observations $Z_t = X_t - X_{t-1} \overset{iid}{\sim} N(r,\sigma)$.
 
 # Comparison of detection times
 
@@ -245,5 +283,7 @@ So how should I handle cases where the likelihood when one (or both) of the hypo
 
 # to-dos
 
+* address cases where p(data|hypothesis) = 0.
 * test performance on time-series with no trend (should be stationary dist'n; include burn-in time)
-* sensitivity analysis using different trends and sd
+* simulation studies using different trends and sd
+
