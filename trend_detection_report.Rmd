@@ -264,6 +264,15 @@ sprt_df %>% filter(sprt_est %in% c(-Inf,Inf) | sprt_known %in% c(-Inf,Inf)) %>%
   knitr::kable(caption = "Infinite sprt when null is false")
 ```
 
+```{r}
+sprt_df %>% ggplot() +
+  geom_line(aes(x = time, y = sd_mle, group = simulation), alpha = 0.5) +
+  geom_hline(aes(yintercept = sd_), col = "red", size = 1.5) +
+  geom_line(data = filter(sprt_df, sprt_est %in% c(-Inf,Inf)), 
+             aes(x = time, y = sd_mle, group = simulation), col = "yellow") +
+  labs(title = "Running ML estimate of sd", subtitle = "yellow denotes instances where statistic is +/- Inf")
+```
+
 Tried using calculating sprt as a difference of logs instead (below). Still have issue with +/- Inf values. Note, this isn't an issue for the sprt calculation when sd is known. I've noticed that all instances where the sprt %in% c(-Inf,Inf) that it is because the early estimate of sd is very small. Maybe, need to include a way to wait until estimate of sd stabilizes. 
 
 ```{r}
@@ -286,4 +295,3 @@ So how should I handle cases where the likelihood when one (or both) of the hypo
 * address cases where p(data|hypothesis) = 0.
 * test performance on time-series with no trend (should be stationary dist'n; include burn-in time)
 * simulation studies using different trends and sd
-
