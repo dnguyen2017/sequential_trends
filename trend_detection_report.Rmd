@@ -21,25 +21,6 @@ sd_ <- 5
 x0_ <- 1000
 t_ <- 100
 pop_df <- multi_sim(nsim = numsim, x0 = x0_, t = t_, trend = trend_, sd = sd_)
-#pop_df <- pop_df %>% mutate(diff_1 = pop - lag(pop))
-
-# pop_df %>% mutate(run_mean = cumSkipNA(diff_1, sum)/(time - 1), # running mean
-#                   run_var_mle = 0) %>%
-  #rowwise() %>%
-  # mutate(run_var_mle = ifelse(is.na(lag(run_mean) ) == TRUE, 0,
-  #                         lag(run_var_mle) + (diff_1 + lag(run_mean)) * (diff_1 + run_mean) ),
-  #        run_sd_mle = sqrt(run_var_mle / (time - 1)))
-
-# for (i in seq_along(pop_df)) {
-#   if (is.na(run_mean[i]) )
-# }
-
-# zoo::rollapply(pop_df$pop, width = 1, FUN = mean) %>% head()
-# 
-# stat_df <- pop_df$diff_1 %>% tail(-1) %>% run_stat()
-# 
-# left_join(pop_df,stat_df)
-
 ```
 
 # Trend detection: sequential vs fixed sample approaches
@@ -159,7 +140,6 @@ Note, the probability models used for the fixed-sample and sequential tests are 
 knitr::read_chunk("trend_detection_functions.R")
 set.seed(123)
 numsim <- 100
-# trend_ <- 1.5
 sd_ <- 5
 x0_ <- 1000
 t_ <- 100
@@ -174,7 +154,7 @@ pop_df_null %>%
   labs(title = "simulated population times series")
 ```
 
-I don't like the behavior of this model when there is no trend. The distribution isn't stationary so I don't think this is a fair test. This is a gaussian random walk which is distributed at the n^th^ time point as $\overset{n}{\Sigma} Z_i \sim  N(0,n\sigma)$ where $Z_i \overset{iid}{\sim} N(0,\sigma)$. That is, the variance is unbounded as $n \rightarrow \inf$.
+I don't like the behavior of this model when there is no trend. The distribution isn't stationary so I don't think this is a fair test. This is a gaussian random walk which is distributed at the n^th^ time point as $N(0,n\sigma)$. That is, the variance is unbounded as $n \rightarrow \inf$.
 
 ```{r cache = T, dependson="simulation_null"}
 sprt_est_null <- 
@@ -251,10 +231,8 @@ ggplot() +
  
 ```
 
-# Numerical problems
-Below are tables showing the first times a simulation yields a test statistic that is +/- Inf. This (so far) only happens when using estimates of sd. As you can see, in these cases the estimates of sd are all very small. This results in likelihoods that are 0 which will mess up the calculation of the log-likelihood ratio. This is an inferential problem, because if the test statistic is ever +/- Inf, then no amount of new evidence can ever change the conclusion. So these early underestimates of sd are a problem for the sd unknown method.
 
-```{r}
+```{r eval = FALSE}
 sprt_df_null %>% filter(sprt_est %in% c(-Inf,Inf) | sprt_known %in% c(-Inf,Inf)) %>% 
   group_by(simulation) %>% filter(time == first(time)) %>%
   knitr::kable(caption = "Infinite sprt when null is true")
@@ -264,7 +242,7 @@ sprt_df %>% filter(sprt_est %in% c(-Inf,Inf) | sprt_known %in% c(-Inf,Inf)) %>%
   knitr::kable(caption = "Infinite sprt when null is false")
 ```
 
-```{r}
+```{r eval = FALSE}
 sprt_df %>% ggplot() +
   geom_line(aes(x = time, y = sd_mle, group = simulation), alpha = 0.5) +
   geom_hline(aes(yintercept = sd_), col = "red", size = 1.5) +
@@ -273,9 +251,12 @@ sprt_df %>% ggplot() +
   labs(title = "Running ML estimate of sd", subtitle = "yellow denotes instances where statistic is +/- Inf")
 ```
 
-Tried using calculating sprt as a difference of logs instead (below). Still have issue with +/- Inf values. Note, this isn't an issue for the sprt calculation when sd is known. I've noticed that all instances where the sprt %in% c(-Inf,Inf) that it is because the early estimate of sd is very small. Maybe, need to include a way to wait until estimate of sd stabilizes. 
+```{r eval = FALSE}
+sprt_df %>% ggplot() +
+  geom_point(aes(x = time, y = sd_mle, col = decision_est), alpha = 0.3)
+```
 
-```{r}
+```{r eval = FALSE}
 sprt_est_alt <- 
   pop_df %>% #group_by(simulation) %>% 
   calc_sprt_alt(sd_est = "sd_mle") %>%
@@ -288,10 +269,8 @@ sprt_est_alt %>% filter(sprt_est %in% c(-Inf,Inf)) %>%
   knitr::kable(caption = "Infinite sprt when null is false")
 ```
 
-So how should I handle cases where the likelihood when one (or both) of the hypotheses is zero? It's hard to come up with a rule for handling this, because the absolute magnitude of likelihoods is meaningless - it is the relative magnitude of likelihoods that matters. Both likelihoods tend to be very small in these cases, but it is still necessary to compare them which is challenging since they are so small.
 
 # to-dos
 
-* address cases where p(data|hypothesis) = 0.
 * test performance on time-series with no trend (should be stationary dist'n; include burn-in time)
 * simulation studies using different trends and sd
