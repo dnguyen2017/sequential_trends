@@ -63,6 +63,57 @@ multi_sim <- function(nsim, x0, t, trend, sd) {
   return(bind_rows(simulations, .id = "simulation") %>% mutate(simulation = as.numeric(simulation)))
 }
 
+###
+sim_log_gomp <- function (xinit,     # initial log population size
+                     lambda, # population growth rate
+                     b,      # density dependence
+                     phi,    # process noise autocorrelation [-1,1]
+                     sd_proc, # process noise: N(0, sd_proc)
+                     sd_obs,  # observation noise: N(0, sd_obs)
+                     tfinal,
+                     nsim,
+                     runstat = TRUE) {
+  
+  # init storage list for all simulation
+  sim_list <- vector("list", length = nsim)
+  
+  for (i in seq_along(sim_list)) {
+    # init storage for current simulation
+    log_x <- vector("numeric", length = tfinal)
+    log_y <- vector("numeric", length = tfinal)
+    
+    proc_error <- rnorm(n = 1, mean = 0, sd = sd_proc)
+    
+    log_x[1] <- xinit  
+    log_y[1] <- xinit + rnorm(n = 1, mean = 0, sd = sd_obs) 
+    
+    # sim population dynamics
+    for (j in 2:tfinal) {
+      proc_error <- phi * proc_error + rnorm(n = 1, mean = 0, sd = sd_proc)
+      log_x[j] <- lambda + b * log_x[j-1] + proc_error
+      log_y[j] <- log_x[j] + rnorm(n = 1, mean = 0, sd = sd_obs)
+    }
+    # save current simulation
+    sim_list[[i]] <- (tidyr::tibble(time = 1:tfinal,
+                                    log_x = log_x,
+                                    log_y = log_y,
+                                    lambda = lambda,
+                                    b_ = b,
+                                    phi = phi,
+                                    sd_proc = sd_proc,
+                                    sd_obs = sd_obs))
+  } 
+  out <- dplyr::bind_rows(sim_list, .id = "simulation")
+  
+  if(runstat == TRUE){
+    out$diff_1 <- out$log_x - lag(out$log_x)
+    running_stats <- run_stat(diff(out$log_x))
+    out <- dplyr::left_join(out, running_stats, by = "diff_1")
+  }
+  
+  return(out)
+}
+
 ### analysis functions
 
 # apply FUNC cumulatively when NA are present
