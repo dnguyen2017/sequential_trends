@@ -269,6 +269,79 @@ sprt_est_alt %>% filter(sprt_est %in% c(-Inf,Inf)) %>%
   knitr::kable(caption = "Infinite sprt when null is false")
 ```
 
+# Performance on Gompertz model
+
+```{r}
+test <- sim_log_gomp(log(1000), 2.4, 0.65, phi = 0, sd_proc = 0.4, sd_obs = 0, tfinal = 100, nsim = 100)
+
+test %>% ggplot() + 
+  geom_line(aes(x = time, y = log_x, group = simulation, col = simulation), alpha = 0.5) + 
+  geom_hline(aes(yintercept = log(1000))) +
+  theme(legend.position = "n") + 
+  labs(title = "Gompertz model without trend (log-scale)")
+
+delay_gomp <- 
+  full_join(test %>%  rename(pop = log_x) %>% 
+  calc_sprt(sd_est = "sd_proc") %>% 
+  rename(decision_known = decision) %>%   
+    group_by(time) %>%
+  count(decision_known, name = "n_known"),
+test %>%  rename(pop = log_x) %>% 
+  calc_sprt(sd_est = "sd_mle") %>% 
+  rename(decision_est = decision) %>%   
+  group_by(time) %>%
+  count(decision_est, name = "n_est"))
+
+mintime_gomp <- test %>% mutate(trend = 0) %>%  rename(pop = log_x) %>% 
+  seq_lm(nsim = 10) %>% get_conclusion(sig_level = 0.05) %>%
+      group_by(time) %>%
+    count(type_error) %>%
+    filter(type_error %in% c("significant_true","significant_false") )
+
+delay_gomp %>%
+  ggplot() +
+  geom_line(aes(x = time, y = n_est, col = decision_est), size = 1.5, linetype = "solid") +
+  geom_line(aes(x = time, y = n_known, col = decision_known), size = 1.5, linetype = "dashed") +
+  geom_line(data = mintime_gomp, aes(x = time, y = n), size = 1.5) +
+  labs(title = "False positive rates of tests",
+       subtitle = "Solid = sd unknown; Dashed = sd known; black = fixed-sample test",
+       y = "frequency of false positives")
+```
+
+```{r eval = FALSE}
+# try using iid normal as data to test performance when null is true
+test <- test %>% mutate(pop = rnorm(n = 10000, mean = 0, sd = 0.4))
+
+# note that the sd_mle is not correct here
+delay_gomp <- 
+  full_join(test %>%  #rename(pop = log_x) %>% 
+  calc_sprt(sd_est = "sd_proc") %>% 
+  rename(decision_known = decision) %>%   
+    group_by(time) %>%
+  count(decision_known, name = "n_known"),
+test %>%  #rename(pop = log_x) %>% 
+  calc_sprt(sd_est = "sd_mle") %>% 
+  rename(decision_est = decision) %>%   
+  group_by(time) %>%
+  count(decision_est, name = "n_est"))
+
+mintime_gomp <- test %>% mutate(trend = 0) %>%  #rename(pop = log_x) %>% 
+  seq_lm(nsim = 10) %>% get_conclusion(sig_level = 0.05) %>%
+      group_by(time) %>%
+    count(type_error) %>%
+    filter(type_error %in% c("significant_true","significant_false") )
+
+delay_gomp %>%
+  ggplot() +
+  geom_line(aes(x = time, y = n_est, col = decision_est), size = 1.5, linetype = "solid") +
+  geom_line(aes(x = time, y = n_known, col = decision_known), size = 1.5, linetype = "dashed") +
+  geom_line(data = mintime_gomp, aes(x = time, y = n), size = 1.5) +
+  labs(title = "False positive rates of tests",
+       subtitle = "Solid = sd unknown; Dashed = sd known; black = fixed-sample test",
+       y = "frequency of false positives")
+```
+
+
 # to-dos
 
 * test performance on time-series with no trend (should be stationary dist'n; include burn-in time)
