@@ -271,6 +271,15 @@ sprt_est_alt %>% filter(sprt_est %in% c(-Inf,Inf)) %>%
 
 # Performance on Gompertz model
 
+The Gompertz model is commonly used to model population dynamics. 
+
+\begin{align*}
+X_{t+1} &= \lambda + b (X_t) + N(0, \sigma^2)
+\end{align*}
+
+$X_t$ is the log population size at time $t$, $\lambda$ is the population growth rate per time step, and $b$ is the magnitude of density-dependence. The 100 simulations presented below were run for 100 time steps with an intial population size of $\ln(1000)$, $\lambda = 2.4$, $b = 0.65$, and $\sigma = 0.4$
+
+
 ```{r}
 test <- sim_log_gomp(log(1000), 2.4, 0.65, phi = 0, sd_proc = 0.4, sd_obs = 0, tfinal = 100, nsim = 100)
 
@@ -307,6 +316,10 @@ delay_gomp %>%
        subtitle = "Solid = sd unknown; Dashed = sd known; black = fixed-sample test",
        y = "frequency of false positives")
 ```
+
+Again, the sequential tests all eventually reject the null in favor of the hypothesis that the population is growing. But the fixed-sample test actuallly performs very well. I'm not sure why the sequential test are so bad. Note that I am using a one-sided alternative for the sequential tests here ($H_1: r > 0$) but I don't think that would account for the poor performance.
+
+Maybe is an issue with the likelihood model? Or th decision boundaries?
 
 ```{r eval = FALSE}
 # try using iid normal as data to test performance when null is true
