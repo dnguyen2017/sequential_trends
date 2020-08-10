@@ -80,10 +80,36 @@ pop_df %>%
   labs(title = "simulated population times series")
 ```
 
-```{r cache = T, dependson="simulation"}
+```{r eval = FALSE}
+# compare decision when using sd_min arg
 sprt_est <- 
   pop_df %>% #group_by(simulation) %>% 
   calc_sprt(sd_est = "sd_mle") %>%
+  rename(decision_est = decision,
+         sprt_est = sprt) #%>%
+  #select(-lik0, -lik1)
+
+sprt_est_min <- 
+  pop_df %>% #group_by(simulation) %>% 
+  calc_sprt(sd_est = "sd_mle", sd_min = 3) %>%
+  rename(decision_est = decision,
+         sprt_est = sprt) #%>%
+  #select(-lik0, -lik1)
+```
+
+```{r eval = FALSE}
+# early decision when using sd_min > 0 is a subset of sd_min == 0
+sprt_est %>% filter(decision_est == "H1")  %>% filter(time %in% 2:4) %>% pull(simulation) %>% unique()
+sprt_est_min %>% filter(decision_est == "H1") %>% filter(time %in% 2:4) %>% pull(simulation) %>% unique()
+
+```
+
+
+
+```{r cache = T, dependson="simulation"}
+sprt_est <- 
+  pop_df %>% #group_by(simulation) %>% 
+  calc_sprt(sd_est = "sd_mle", sd_min = 3) %>%
   rename(decision_est = decision,
          sprt_est = sprt) %>%
   select(-lik0, -lik1)

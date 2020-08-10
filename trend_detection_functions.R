@@ -209,7 +209,7 @@ likelihood <- function (x_prev, x_now, sd, interval = c(), guess = 1.5) {
 }
 
 # sequential test functions
-calc_sr <- function(data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est) {
+calc_sr <- function(data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est, sd_min = 0) {
   
   # initialize empty columns for likelihood calculations
   data$lik0 <- NA
@@ -239,6 +239,8 @@ calc_sr <- function(data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est) {
     
     # if estimate of sd is invalid skip calculation
     if(is.na(sd) == TRUE || sd <= 0) next
+    # replace sd if lower than minimum (default sd_min == 0)
+    sd <- max(sd_min, sd)
     
     # likelihood calculation
     data[i,"lik0"] <- dnorm(x = x1, mean = x0, sd = sd) # H0: x_t+1 ~ N(x_t, sd)
@@ -281,12 +283,12 @@ calc_sr <- function(data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est) {
 #   return(OUT)
 # }
 
-calc_sprt <- function (data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est, alpha = 0.05, beta = 0.2) {
+calc_sprt <- function (data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est, alpha = 0.05, beta = 0.2, sd_min = 0) {
   # this function calculates the log-likelhiood ratio as log(p1) - log(p0) instead of using division
   # 2nd step of SPRT calculation now sets all NA values to 0 (we can't compare models when we don't have sd_mle yet)
   # 3rd step of SPRT calculation sets all +/-Inf values to NA. When taking cumulative LR we skip NA values
   OUT <- data %>%
-    calc_sr(sd_est = sd_est) %>%
+    calc_sr(sd_est = sd_est, sd_min = sd_min) %>%
     group_by(simulation) %>%
     mutate(sprt = log(lik1) - log(lik0) ,
            sprt = ifelse(is.na(sprt), 0, sprt),
