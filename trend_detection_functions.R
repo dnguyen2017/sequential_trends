@@ -65,7 +65,8 @@ multi_sim <- function(nsim, x0, t, trend, sd) {
 
 ###
 sim_log_gomp <- function (xinit,     # initial log population size
-                     lambda, # population growth rate
+                     lambda, # population growth rate,
+                     trend = 0,  # log-linear trend term
                      b,      # density dependence
                      phi,    # process noise autocorrelation [-1,1]
                      sd_proc, # process noise: N(0, sd_proc)
@@ -90,7 +91,7 @@ sim_log_gomp <- function (xinit,     # initial log population size
     # sim population dynamics
     for (j in 2:tfinal) {
       proc_error <- phi * proc_error + rnorm(n = 1, mean = 0, sd = sd_proc)
-      log_x[j] <- lambda + b * log_x[j-1] + proc_error
+      log_x[j] <- lambda + b * log_x[j-1] + trend + proc_error
       log_y[j] <- log_x[j] + rnorm(n = 1, mean = 0, sd = sd_obs)
     }
     # save current simulation
@@ -98,6 +99,7 @@ sim_log_gomp <- function (xinit,     # initial log population size
                                     log_x = log_x,
                                     log_y = log_y,
                                     lambda = lambda,
+                                    trend = trend,
                                     b_ = b,
                                     phi = phi,
                                     sd_proc = sd_proc,
@@ -149,8 +151,8 @@ seq_lm <- function (data, nsim) {
   # fit lm and extract slope estimates and p-values
   for (i in seq_along(lm_list)) {
     # create empty cols for pval and trend estimate
-    data$pval <- NA
-    data$trend_est <- NA
+    data$pval <- NA_real_
+    data$trend_est <- NA_real_
     
     # grab current time series
     current_ts <- data %>% filter(simulation == i)
@@ -212,8 +214,8 @@ likelihood <- function (x_prev, x_now, sd, interval = c(), guess = 1.5) {
 calc_sr <- function(data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est, sd_min = 0) {
   
   # initialize empty columns for likelihood calculations
-  data$lik0 <- NA
-  data$lik1 <- NA
+  data$lik0 <- NA_real_
+  data$lik1 <- NA_real_
   
   # parameter space
   theta0 <- accept_reg
