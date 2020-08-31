@@ -23,10 +23,12 @@ Where $N_t$ is the population size at time $t$, $r$ is the population trend, and
 
 We can also test this one-sided hypothesis using a sequential test. We can define our sequential test statistic at time $t$ $(S_t)$ as:
 
-\begin{align*}
-S_t &= \Sigma^{t}_{i=1}R_i & \text{for } t &= 1,2,3, \ldots\\
-\text{and } R_1 &= 0 & R_t &= \log \left( \frac{P(N_{t} | N_{t-1}, \hat{r}_t, \sigma)}{P(N_{t} | N_{t-1}, r = 0, \sigma)} \right)
-\end{align*}
+<!-- \begin{align*} -->
+<!-- S_t &= \Sigma^{t}_{i=1}R_i & \text{for } t &= 1,2,3, \ldots\\ -->
+<!-- \text{and } R_1 &= 0 & R_t &= \log \left( \frac{P(N_{t} | N_{t-1}, \hat{r}_t, \sigma)}{P(N_{t} | N_{t-1}, r = 0, \sigma)} \right) -->
+<!-- \end{align*} -->
+
+<a href="https://www.codecogs.com/eqnedit.php?latex=\begin{align*}&space;S_t&space;&=&space;\Sigma^{t}_{i=1}R_i&space;&&space;\text{for&space;}&space;t&space;&=&space;1,2,3,&space;\ldots\\&space;\text{and&space;}&space;R_1&space;&=&space;0&space;&&space;R_t&space;&=&space;\log&space;\left(&space;\frac{P(N_{t}&space;|&space;N_{t-1},&space;\hat{r}_t,&space;\sigma)}{P(N_{t}&space;|&space;N_{t-1},&space;r&space;=&space;0,&space;\sigma)}&space;\right)&space;\end{align*}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\begin{align*}&space;S_t&space;&=&space;\Sigma^{t}_{i=1}R_i&space;&&space;\text{for&space;}&space;t&space;&=&space;1,2,3,&space;\ldots\\&space;\text{and&space;}&space;R_1&space;&=&space;0&space;&&space;R_t&space;&=&space;\log&space;\left(&space;\frac{P(N_{t}&space;|&space;N_{t-1},&space;\hat{r}_t,&space;\sigma)}{P(N_{t}&space;|&space;N_{t-1},&space;r&space;=&space;0,&space;\sigma)}&space;\right)&space;\end{align*}" title="\begin{align*} S_t &= \Sigma^{t}_{i=1}R_i & \text{for } t &= 1,2,3, \ldots\\ \text{and } R_1 &= 0 & R_t &= \log \left( \frac{P(N_{t} | N_{t-1}, \hat{r}_t, \sigma)}{P(N_{t} | N_{t-1}, r = 0, \sigma)} \right) \end{align*}" /></a>
 
 $\hat{r}_t$ is the MLE of r computed from data points $X_1,\ldots,X_t$. The MLE is constrained to  $(0,\inf)$ or $(-\inf, 0)$ depending on whether detection of a linear increase or decrease is desired. (In my computer implementation, I just use a finite interval for the constrained MLE).
 
