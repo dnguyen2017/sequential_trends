@@ -1,0 +1,396 @@
+---
+title: "ad hoc methods for detecting population trends"
+author: "David Nguyen"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    keep_md: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+library(tidyverse)
+source("trend_detection_functions.R")
+```
+
+
+```{r simulation, cache = T, results = FALSE}
+set.seed(123)
+numsim <- 100
+trend_ <- 1.5
+sd_ <- 5
+sd_lower <- 3
+x0_ <- 1000
+t_ <- 100
+pop_df <- multi_sim(nsim = numsim, x0 = x0_, t = t_, trend = trend_, sd = sd_)
+```
+
+# Trend detection: sequential vs fixed sample approaches
+Wildlife managers and conservationists need to detect population trends in a timely and reliable manner. Timeliness is reflected in the number of samples (e.g., years) needed to detect a trend. Reliability is captured by the type I error and power of a test. Simple linear regression using sampling time as a covariate is commonly used to detect population trends. Researchers have used this approach to identify the minimum years of monitoring needed to detect population trends.
+
+For example, [White (2019)](https://academic.oup.com/bioscience/article/69/1/40/5195956#129750432) repeatedly fit linear models to sub-samples of a time series to identify the minimum sample size needed to achieve a specified type I error and power. That is, for a time series with $T$ time points, he fit a linear regression model to each contiguous sub-samples of size $2, 3, \ldots, T-1$. Using the arbitrary (but conventional) benchmark of 0.8 power at the 0.05 significance level, White used the regression outputs to find the minimum sub-sample length such that 80 % of the samples had a significant regression slope coefficient. This is essentially a sample size calculation for a one-sided hypothesis test with $H_0: r = 0$ and $H_1: r > 0$ or $H_1: r < 0$.
+
+White used data simulated from the following population model for examples of how to calculate fixed-sample sizes needed to detect population trends,
+$$ N_{t+1} \sim N(N_t + r,\sigma), $$
+Where $N_t$ is the population size at time $t$, $r$ is the population trend, and $\sigma$ is the population variability.
+
+We can also test this one-sided hypothesis using a sequential test. We can define our sequential test statistic at time $t$ $(S_t)$ as:
+
+\begin{align*}
+S_t &= \Sigma^{t}_{i=1}R_i & \text{for } t &= 1,2,3, \ldots\\
+\text{and } R_1 &= 0 & R_t &= \log \left( \frac{P(N_{t} | N_{t-1}, \hat{r}_t, \sigma)}{P(N_{t} | N_{t-1}, r = 0, \sigma)} \right)
+\end{align*}
+
+$\hat{r}_t$ is the MLE of r computed from data points $X_1,\ldots,X_t$. The MLE is constrained to  $(0,\inf)$ or $(-\inf, 0)$ depending on whether detection of a linear increase or decrease is desired. (In my computer implementation, I just use a finite interval for the constrained MLE).
+
+The decision rule is:
+
+\begin{align*}
+    \begin{cases}
+      \text{reject } H_0  & S_t > \log(A) \\
+      \text{accept } H_0 & S_t \leq \log(B) \\
+      \text{continue sampling} & \log(B) < S_t  \leq  \log(A)  
+    \end{cases}
+\end{align*}
+
+The thresholds are set following Wald's method such that $A \sim \frac{1-\beta}{\alpha}$ and $B \sim \frac{\beta}{1-\alpha}$ where $\alpha$ and $\beta$ is the probabilities of type I and II error, respectively (I'm not sure if these approximations work for this inference problem, I still need to check if these boundaries give the correct error probabilities).
+
+For the situation where $\sigma$ is unknown, the sequential test statistic is instead calculated using the current ML estimate of of the standard deviation ($\hat{\sigma_t}$). $\hat{\sigma_t}$ is computed as a [running variance](https://www.johndcook.com/blog/standard_deviation/) from the first differences of the observations $N_t - N_{t-1} \overset{iid}{\sim} Norm(r,\sigma)$ for $t = 2,3,4,\ldots$. If we know that there is a lower bound on the variability of the population when it is stable we can use $\sigma_{t} = max \left( \sigma_{mle},\sigma_{min} \right)$.
+
+# Comparison of detection times
+
+Tests:
+
+1. fixed-sample size linear regression test
+1. sequential test ($\sigma$ known)
+1. sequential test ($\sigma$ unknown)
+    + the running MLE estimate of $\sigma$ is used to calculate the test statistic
+    + note that the MLE estimate of $\sigma$ is uncorrected (biased low)
+
+I compare the performance of the tests according to the time required to reject the null hypothesis that there is no population trend ($\alpha = 0.05, \beta=0.2$). The population data were simulated from an additive model $N_{t+1} = N(N_t + r,\sigma)$ with parameters $r =$ `r trend_` and $\sigma =$ `r sd_`. The population was initialized as `r x0_` individuals and was run for `r t_` time steps. `r numsim` simulations were used.
+
+```{r}
+pop_df %>%
+  ggplot() + geom_line(aes(x = time, y = pop, group = simulation), alpha = 0.2) +
+  labs(title = "simulated population times series")
+```
+
+```{r eval = FALSE}
+# compare decision when using sd_min arg
+sprt_est <- 
+  pop_df %>% #group_by(simulation) %>% 
+  calc_sprt(sd_est = "sd_mle") %>%
+  rename(decision_est = decision,
+         sprt_est = sprt) #%>%
+  #select(-lik0, -lik1)
+
+sprt_est_min <- 
+  pop_df %>% #group_by(simulation) %>% 
+  calc_sprt(sd_est = "sd_mle", sd_min = 3) %>%
+  rename(decision_est = decision,
+         sprt_est = sprt) #%>%
+  #select(-lik0, -lik1)
+```
+
+```{r eval = FALSE}
+# early decision when using sd_min > 0 is a subset of sd_min == 0
+sprt_est %>% filter(decision_est == "H1")  %>% filter(time %in% 2:4) %>% pull(simulation) %>% unique()
+sprt_est_min %>% filter(decision_est == "H1") %>% filter(time %in% 2:4) %>% pull(simulation) %>% unique()
+
+```
+
+
+
+```{r cache = T, dependson="simulation"}
+sprt_est <- 
+  pop_df %>% 
+  calc_sprt(sd_est = "sd_mle", sd_min = sd_lower) %>%
+  rename(decision_est = decision,
+         sprt_est = sprt) %>%
+  select(-lik0, -lik1)
+
+sprt_known <- 
+  pop_df %>% 
+  calc_sprt(sd_est = "sd") %>%
+  rename(decision_known = decision,
+         sprt_known = sprt) %>%
+  select(-lik0, -lik1)
+
+sprt_df <- 
+  full_join(sprt_est, sprt_known) 
+
+delay_df <-
+  full_join(sprt_df %>% detection_time_est(),
+          sprt_df %>% detection_time_known()) %>%
+  pivot_longer(cols = -simulation, names_to = "method", values_to = "delay") %>%
+  group_by(method) %>%
+  mutate(mean_delay = mean(delay, na.rm = TRUE))
+```
+
+```{r cache = T,dependson="simulation"}
+samplesize_df <- 
+  pop_df %>% seq_lm(nsim = numsim) %>%
+  get_conclusion(sig_level = 0.05) %>%
+  get_power(power_level = 0.8, nsim = numsim)
+```
+
+The fixed-sample size needs `r unique(samplesize_df$mintime)` samples to achieve 0.8 power at the 0.05 significance level. In comparison, the sequential tests require `r delay_df %>% filter(method == "delay_known") %>% pull(mean_delay) %>% unique() %>% ceiling()` ($\sigma$ known) and `r delay_df %>% filter(method == "delay_est") %>% pull(mean_delay) %>% unique() %>% ceiling()` ($\sigma$ unknown and $\sigma_{min} =$ `r sd_lower`). The reason that the sequential test where $\sigma$ is unknown detects the change faster than when $\sigma$ is known (for the parameters used here) is because the MLE estimate of $\sigma$ is uncorrected which biases it low. This makes the likelihood of the null smaller than it should be. The table belows shows the number of instances either sequential method required as many or more samples than the fixed-sample size test.
+
+```{r}
+samplesize <- unique(samplesize_df$mintime)
+delay_df %>% count(delay >= samplesize) %>% knitr::kable()
+
+```
+
+```{r warning=FALSE}
+delay_df %>% 
+  ggplot() +
+  geom_histogram(aes(x = delay, fill = method), binwidth = 1) +
+  geom_vline(aes(xintercept = mean_delay, linetype = method), size = 1.5) +
+  geom_vline(aes(xintercept = mean(samplesize_df$mintime)), col = "red", size = 1.5) +
+  xlim(0, 30) +
+  labs(title = "Detection times for population trend",
+       subtitle = "red line is minimum time for fixed-sample method")
+```
+
+Note, the probability models used for the fixed-sample and sequential tests are not the same. The sequential test uses the true data-generating model (variability is from process noise) whereas the fixed-sample test fits a simple linear regression using time as a covariate (observation noise). A more comparable test would be to use a sequential t-test on the first-differenced values of the population sizes. 
+
+```{r}
+knitr::knit_exit()
+```
+
+# Performance when null is true (no trend)
+
+```{r simulation_null, cache=T}
+set.seed(123)
+numsim <- 100
+sd_ <- 5
+x0_ <- 1000
+t_ <- 100
+pop_df_null <- multi_sim(nsim = numsim, x0 = x0_, t = t_, trend = 0, sd = sd_)
+```
+
+How do the tests perform when there is no trend? The sequential tests would (ideally) accept the null hypothesis. The fixed-sample procedure cannot accept the null, so I will consider any non-significant p-values to indicate that the null was "accepted."
+
+```{r}
+pop_df_null %>%
+  ggplot() + geom_line(aes(x = time, y = pop, group = simulation), alpha = 0.2) +
+  labs(title = "simulated population times series")
+```
+
+I don't like the behavior of this model when there is no trend. The distribution isn't stationary so I don't think this is a fair test. This is a gaussian random walk which is distributed at the n^th^ time point as $N(0,n\sigma)$. That is, the variance is unbounded as $n \rightarrow \inf$.
+
+```{r cache = T, dependson="simulation_null"}
+sprt_est_null <- 
+  pop_df_null %>% 
+  calc_sprt(sd_est = "sd_mle") %>%
+  rename(decision_est = decision,
+         sprt_est = sprt) %>%
+  select(-lik0, -lik1)
+
+sprt_known_null <- 
+  pop_df_null %>% 
+  calc_sprt(sd_est = "sd") %>%
+  rename(decision_known = decision,
+         sprt_known = sprt) %>%
+  select(-lik0, -lik1)
+
+sprt_df_null <- 
+  full_join(sprt_est_null, sprt_known_null) 
+
+delay_df_null <-
+  full_join(
+  sprt_df_null %>%
+  group_by(time) %>%
+  count(decision_est, name = "n_est"),
+sprt_df_null %>%
+  group_by(time) %>%
+  count(decision_known, name = "n_known")
+)
+```
+
+
+```{r cache = T,dependson="simulation_null"}
+samplesize_df_null <- 
+  pop_df_null %>% seq_lm(nsim = numsim) %>%
+  get_conclusion(sig_level = 0.05) #%>%
+  #get_power(power_level = 0.8, nsim = numsim)
+
+mintime_df_null <-
+  samplesize_df_null %>% 
+    group_by(time) %>%
+    count(type_error) %>%
+    filter(type_error %in% c("significant_true","significant_false") )
+```
+
+```{r fpr_plot}
+delay_df_null %>%
+  ggplot() +
+  geom_line(aes(x = time, y = n_est, col = decision_est), size = 1.5, linetype = "solid") +
+  geom_line(aes(x = time, y = n_known, col = decision_known), size = 1.5, linetype = "dashed") +
+  geom_line(data = mintime_df_null, aes(x = time, y = n), size = 1.5) +
+  labs(title = "False positive rates of tests",
+       subtitle = "Solid = sd unknown; Dashed = sd known; black = fixed-sample test",
+       y = "frequency of false positives")
+```
+
+All of the tests perform quite poorly. But, I think that this is more an issue with the null model. It would be better to simulate from a gompertz model at (stochastic) equilibrium to generate test data.
+
+```{r eval = FALSE}
+# plot FPR individually
+
+delay_df_null %>%
+  ggplot() +
+  geom_line(aes(x = time, y = n_est, col = decision_est), size = 1.5, linetype = "solid") +
+  geom_line(aes(x = time, y = n_known, col = decision_known), size = 1.5, linetype = "dashed") +
+  geom_line(data = mintime_df_null, aes(x = time, y = n), size = 1.5, col = "red") +
+  labs(title = "False positive rate of sequential test",
+       subtitle = "Solid = sd unknown; Dashed = sd known")
+
+mintime_df_null %>%  
+ggplot() +
+  geom_line(aes(x = time, y = n)) +
+  labs(title = "False positive rate for fixed-sample test") +
+  ylim(0,100)
+ 
+```
+
+
+```{r eval = FALSE}
+sprt_df_null %>% filter(sprt_est %in% c(-Inf,Inf) | sprt_known %in% c(-Inf,Inf)) %>% 
+  group_by(simulation) %>% filter(time == first(time)) %>%
+  knitr::kable(caption = "Infinite sprt when null is true")
+
+sprt_df %>% filter(sprt_est %in% c(-Inf,Inf) | sprt_known %in% c(-Inf,Inf)) %>% 
+  group_by(simulation) %>% filter(time == first(time)) %>%
+  knitr::kable(caption = "Infinite sprt when null is false")
+```
+
+```{r eval = FALSE}
+sprt_df %>% ggplot() +
+  geom_line(aes(x = time, y = sd_mle, group = simulation), alpha = 0.5) +
+  geom_hline(aes(yintercept = sd_), col = "red", size = 1.5) +
+  geom_line(data = filter(sprt_df, sprt_est %in% c(-Inf,Inf)), 
+             aes(x = time, y = sd_mle, group = simulation), col = "yellow") +
+  labs(title = "Running ML estimate of sd", subtitle = "yellow denotes instances where statistic is +/- Inf")
+```
+
+```{r eval = FALSE}
+sprt_df %>% ggplot() +
+  geom_point(aes(x = time, y = sd_mle, col = decision_est), alpha = 0.3)
+```
+
+```{r eval = FALSE}
+sprt_est_alt <- 
+  pop_df %>% #group_by(simulation) %>% 
+  calc_sprt_alt(sd_est = "sd_mle") %>%
+  rename(decision_est = decision,
+         sprt_est = sprt) #%>%
+  #select(-lik0, -lik1)
+
+sprt_est_alt %>% filter(sprt_est %in% c(-Inf,Inf)) %>% 
+  group_by(simulation) %>% filter(time == first(time)) %>%
+  knitr::kable(caption = "Infinite sprt when null is false")
+```
+
+# Performance on Gompertz model
+
+The Gompertz model is commonly used to model population dynamics. 
+
+\begin{align*}
+X_{t+1} &= \lambda + b (X_t) + N(0, \sigma^2)
+\end{align*}
+
+$X_t$ is the log population size at time $t$, $\lambda$ is the population growth rate per time step, and $b$ is the magnitude of density-dependence. The 100 simulations presented below were run for 100 time steps with an intial population size of $\ln(1000)$, $\lambda = 2.4$, $b = 0.65$, and $\sigma = 0.4$
+
+
+```{r}
+test <- sim_log_gomp(xinit = log(1000), lambda =  2.4, b = 0.65, phi = 0, sd_proc = 0.4, sd_obs = 0, tfinal = 100, nsim = 100)
+
+test %>% ggplot() + 
+  geom_line(aes(x = time, y = log_x, group = simulation, col = simulation), alpha = 0.5) + 
+  geom_hline(aes(yintercept = log(1000))) +
+  theme(legend.position = "n") + 
+  labs(title = "Gompertz model without trend (log-scale)")
+
+delay_gomp <- 
+  full_join(test %>%  rename(pop = log_x) %>% 
+  calc_sprt(sd_est = "sd_proc") %>% 
+  rename(decision_known = decision) %>%   
+    group_by(time) %>%
+  count(decision_known, name = "n_known"),
+test %>%  rename(pop = log_x) %>% 
+  calc_sprt(sd_est = "sd_mle") %>% 
+  rename(decision_est = decision) %>%   
+  group_by(time) %>%
+  count(decision_est, name = "n_est"))
+
+mintime_gomp <- test %>% mutate(trend = 0) %>%  rename(pop = log_x) %>% 
+  seq_lm(nsim = 10) %>% get_conclusion(sig_level = 0.05) %>%
+      group_by(time) %>%
+    count(type_error) %>%
+    filter(type_error %in% c("significant_true","significant_false") )
+
+delay_gomp %>%
+  ggplot() +
+  geom_line(aes(x = time, y = n_est, col = decision_est), size = 1.5, linetype = "solid") +
+  geom_line(aes(x = time, y = n_known, col = decision_known), size = 1.5, linetype = "dashed") +
+  geom_line(data = mintime_gomp, aes(x = time, y = n), size = 1.5) +
+  labs(title = "False positive rates of tests",
+       subtitle = "Solid = sd unknown; Dashed = sd known; black = fixed-sample test",
+       y = "frequency of false positives")
+```
+
+Again, the sequential tests all eventually reject the null in favor of the hypothesis that the population is growing. But the fixed-sample test actuallly performs very well. I'm not sure why the sequential test are so bad. Note that I am using a one-sided alternative for the sequential tests here ($H_1: r > 0$) but I don't think that would account for the poor performance.
+
+Maybe is an issue with the likelihood model? Or th decision boundaries?
+
+```{r eval = FALSE}
+# try using iid normal as data to test performance when null is true
+test <- test %>% mutate(pop = rnorm(n = 10000, mean = 0, sd = 0.4))
+
+# note that the sd_mle is not correct here
+delay_gomp <- 
+  full_join(test %>%  #rename(pop = log_x) %>% 
+  calc_sprt(sd_est = "sd_proc") %>% 
+  rename(decision_known = decision) %>%   
+    group_by(time) %>%
+  count(decision_known, name = "n_known"),
+test %>%  #rename(pop = log_x) %>% 
+  calc_sprt(sd_est = "sd_mle") %>% 
+  rename(decision_est = decision) %>%   
+  group_by(time) %>%
+  count(decision_est, name = "n_est"))
+
+mintime_gomp <- test %>% mutate(trend = 0) %>%  #rename(pop = log_x) %>% 
+  seq_lm(nsim = 10) %>% get_conclusion(sig_level = 0.05) %>%
+      group_by(time) %>%
+    count(type_error) %>%
+    filter(type_error %in% c("significant_true","significant_false") )
+
+delay_gomp %>%
+  ggplot() +
+  geom_line(aes(x = time, y = n_est, col = decision_est), size = 1.5, linetype = "solid") +
+  geom_line(aes(x = time, y = n_known, col = decision_known), size = 1.5, linetype = "dashed") +
+  geom_line(data = mintime_gomp, aes(x = time, y = n), size = 1.5) +
+  labs(title = "False positive rates of tests",
+       subtitle = "Solid = sd unknown; Dashed = sd known; black = fixed-sample test",
+       y = "frequency of false positives")
+```
+
+
+```{r}
+no_trend <- sim_log_gomp(xinit = log(1000), lambda = 2.4, trend = 0, b = 0.65, phi = 0, sd_proc = 0.4, sd_obs = 0, tfinal = 60, nsim = 10)
+trend_60 <- sim_log_gomp(xinit = log(1000), lambda = 2.4, trend = -log(1000)*0.5/60, b = 0.65, phi = 0, sd_proc = 0.4, sd_obs = 0, tfinal = 60, nsim = 10)
+
+rbind(no_trend, trend_60) %>%
+  ggplot() + geom_line(aes(x = time, y = log_x, group = simulation)) +
+  facet_wrap(~trend)
+  
+```
+
+
+# to-dos
+
+* test performance on time-series with no trend (should be stationary dist'n; include burn-in time)
+* simulation studies using different trends and sd
