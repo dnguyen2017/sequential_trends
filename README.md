@@ -18,7 +18,9 @@ Wildlife managers and conservationists need to detect population trends in a tim
 For example, [White (2019)](https://academic.oup.com/bioscience/article/69/1/40/5195956#129750432) repeatedly fit linear models to sub-samples of a time series to identify the minimum sample size needed to achieve a specified type I error and power. That is, for a time series with $T$ time points, he fit a linear regression model to each contiguous sub-samples of size $2, 3, \ldots, T-1$. Using the arbitrary (but conventional) benchmark of 0.8 power at the 0.05 significance level, White used the regression outputs to find the minimum sub-sample length such that 80 % of the samples had a significant regression slope coefficient. This is essentially a sample size calculation for a one-sided hypothesis test with $H_0: r = 0$ and $H_1: r > 0$ or $H_1: r < 0$.
 
 White used data simulated from the following population model for examples of how to calculate fixed-sample sizes needed to detect population trends,
-$$ N_{t+1} \sim N(N_t + r,\sigma), $$
+<!-- $$ N_{t+1} \sim N(N_t + r,\sigma), $$ -->
+<a href="https://www.codecogs.com/eqnedit.php?latex=N_{t&plus;1}&space;\sim&space;N(N_t&space;&plus;&space;r,\sigma)" target="_blank"><img src="https://latex.codecogs.com/gif.latex?N_{t&plus;1}&space;\sim&space;N(N_t&space;&plus;&space;r,\sigma)" title="N_{t+1} \sim N(N_t + r,\sigma)" /></a>
+
 Where $N_t$ is the population size at time $t$, $r$ is the population trend, and $\sigma$ is the population variability.
 
 We can also test this one-sided hypothesis using a sequential test. We can define our sequential test statistic at time $t$ $(S_t)$ as:
