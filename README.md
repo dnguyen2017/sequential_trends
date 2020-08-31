@@ -48,7 +48,12 @@ The decision rule is:
 
 The thresholds are set following Wald's method such that $A \sim \frac{1-\beta}{\alpha}$ and $B \sim \frac{\beta}{1-\alpha}$ where $\alpha$ and $\beta$ is the probabilities of type I and II error, respectively (I'm not sure if these approximations work for this inference problem, I still need to check if these boundaries give the correct error probabilities).
 
-For the situation where $\sigma$ is unknown, the sequential test statistic is instead calculated using the current ML estimate of of the standard deviation ($\hat{\sigma_t}$). $\hat{\sigma_t}$ is computed as a [running variance](https://www.johndcook.com/blog/standard_deviation/) from the first differences of the observations $N_t - N_{t-1} \overset{iid}{\sim} Norm(r,\sigma)$ for $t = 2,3,4,\ldots$. If we know that there is a lower bound on the variability of the population when it is stable we can use $\sigma_{t} = max \left( \sigma_{mle},\sigma_{min} \right)$.
+For the situation where $\sigma$ is unknown, the sequential test statistic is instead calculated using the current ML estimate of of the standard deviation ($\hat{\sigma_t}$). $\hat{\sigma_t}$ is computed as a [running variance](https://www.johndcook.com/blog/standard_deviation/) from the first differences of the observations 
+<!-- $N_t - N_{t-1} \overset{iid}{\sim} Norm(r,\sigma)$  -->
+<a href="https://www.codecogs.com/eqnedit.php?latex=N_t&space;-&space;N_{t-1}&space;\overset{iid}{\sim}&space;Norm(r,\sigma)" target="_blank"><img src="https://latex.codecogs.com/gif.latex?N_t&space;-&space;N_{t-1}&space;\overset{iid}{\sim}&space;Norm(r,\sigma)" title="N_t - N_{t-1} \overset{iid}{\sim} Norm(r,\sigma)" /></a>
+for $t = 2,3,4,\ldots$. If we know that there is a lower bound on the variability of the population when it is stable we can use 
+<!-- $\sigma_{t} = max \left( \sigma_{mle},\sigma_{min} \right)$. -->
+<a href="https://www.codecogs.com/eqnedit.php?latex=\sigma_{t}&space;=&space;max&space;\left(&space;\sigma_{mle},\sigma_{min}&space;\right)" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\sigma_{t}&space;=&space;max&space;\left(&space;\sigma_{mle},\sigma_{min}&space;\right)" title="\sigma_{t} = max \left( \sigma_{mle},\sigma_{min} \right)" /></a>
 
 # Comparison of detection times
 
