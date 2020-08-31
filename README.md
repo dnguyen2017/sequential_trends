@@ -36,13 +36,15 @@ $\hat{r}_t$ is the MLE of r computed from data points $X_1,\ldots,X_t$. The MLE 
 
 The decision rule is:
 
-\begin{align*}
-    \begin{cases}
-      \text{reject } H_0  & S_t > \log(A) \\
-      \text{accept } H_0 & S_t \leq \log(B) \\
-      \text{continue sampling} & \log(B) < S_t  \leq  \log(A)  
-    \end{cases}
-\end{align*}
+<!-- \begin{align*} -->
+<!--     \begin{cases} -->
+<!--       \text{reject } H_0  & S_t > \log(A) \\ -->
+<!--       \text{accept } H_0 & S_t \leq \log(B) \\ -->
+<!--       \text{continue sampling} & \log(B) < S_t  \leq  \log(A)   -->
+<!--     \end{cases} -->
+<!-- \end{align*} -->
+
+<a href="https://www.codecogs.com/eqnedit.php?latex=\begin{align*}&space;\begin{cases}&space;\text{reject&space;}&space;H_0&space;&&space;S_t&space;>&space;\log(A)&space;\\&space;\text{accept&space;}&space;H_0&space;&&space;S_t&space;\leq&space;\log(B)&space;\\&space;\text{continue&space;sampling}&space;&&space;\log(B)&space;<&space;S_t&space;\leq&space;\log(A)&space;\end{cases}&space;\end{align*}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\begin{align*}&space;\begin{cases}&space;\text{reject&space;}&space;H_0&space;&&space;S_t&space;>&space;\log(A)&space;\\&space;\text{accept&space;}&space;H_0&space;&&space;S_t&space;\leq&space;\log(B)&space;\\&space;\text{continue&space;sampling}&space;&&space;\log(B)&space;<&space;S_t&space;\leq&space;\log(A)&space;\end{cases}&space;\end{align*}" title="\begin{align*} \begin{cases} \text{reject } H_0 & S_t > \log(A) \\ \text{accept } H_0 & S_t \leq \log(B) \\ \text{continue sampling} & \log(B) < S_t \leq \log(A) \end{cases} \end{align*}" /></a>
 
 The thresholds are set following Wald's method such that $A \sim \frac{1-\beta}{\alpha}$ and $B \sim \frac{\beta}{1-\alpha}$ where $\alpha$ and $\beta$ is the probabilities of type I and II error, respectively (I'm not sure if these approximations work for this inference problem, I still need to check if these boundaries give the correct error probabilities).
 
