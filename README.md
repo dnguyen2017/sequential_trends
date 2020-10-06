@@ -10,16 +10,21 @@ Wildlife managers and conservationists need to detect population trends in a tim
 
 For example, [White (2019)](https://academic.oup.com/bioscience/article/69/1/40/5195956#129750432) repeatedly fit linear models to sub-samples of a time series to identify the minimum sample size needed to achieve a specified type I error and power. That is, for a time series with *T* time points, he fit a linear regression model to each contiguous sub-samples of size 2, 3, …, *T* − 1. Using the arbitrary (but conventional) benchmark of 0.8 power at the 0.05 significance level, White used the regression outputs to find the minimum sub-sample length such that 80 % of the samples had a significant regression slope coefficient. This is essentially a sample size calculation for a one-sided hypothesis test with *H*<sub>0</sub> : *r* = 0 and *H*<sub>1</sub> : *r* &gt; 0 or *H*<sub>1</sub> : *r* &lt; 0.
 
-White used data simulated from the following population model for examples of how to calculate fixed-sample sizes needed to detect population trends,
-*N*<sub>*t* + 1</sub> ∼ *N*(*N*<sub>*t*</sub> + *r*, *σ*),
-
-Where *N*<sub>*t*</sub> is the population size at time *t*, *r* is the population trend, and *σ* is the population variability.
+White used data simulated from the following population model for examples of how to calculate fixed-sample sizes needed to detect population trends, *N*<sub>*t* + 1</sub> ∼ *N*(*N*<sub>*t*</sub> + *r*, *σ*), where *N*<sub>*t*</sub> is the population size at time *t*, *r* is the population trend, and *σ* is the population variability.
 
 We can also test this one-sided hypothesis using a sequential test. We can define our sequential test statistic at time *t* (*S*<sub>*t*</sub>) as:
 
 $\\hat{r}\_t$ is the MLE of r computed from data points *X*<sub>1</sub>, …, *X*<sub>*t*</sub>. The MLE is constrained to (0, inf) or ( − inf, 0) depending on whether detection of a linear increase or decrease is desired. (In my computer implementation, I just use a finite interval for the constrained MLE).
 
 The decision rule is:
+
+$$\\begin{align\*}
+    \\begin{cases}
+      \\text{reject } H\_0  & S\_t &gt; \\log(A) \\\\
+      \\text{accept } H\_0 & S\_t \\leq \\log(B) \\\\
+      \\text{continue sampling} & \\log(B) &lt; S\_t  \\leq  \\log(A)
+    \\end{cases}
+\\end{align\*}$$
 
 The thresholds are set following Wald's method such that $A \\sim \\frac{1-\\beta}{\\alpha}$ and $B \\sim \\frac{\\beta}{1-\\alpha}$ where *α* and *β* is the probabilities of type I and II error, respectively (I'm not sure if these approximations work for this inference problem, I still need to check if these boundaries give the correct error probabilities).
 
