@@ -14,17 +14,24 @@ White used data simulated from the following population model for examples of ho
 
 We can also test this one-sided hypothesis using a sequential test. We can define our sequential test statistic at time *t* (*S*<sub>*t*</sub>) as:
 
+<!-- \begin{align*} -->
+<!-- S_t &= \Sigma^{t}_{i=1}R_i & \text{for } t &= 1,2,3, \ldots\\ -->
+<!-- \text{and } R_1 &= 0 & R_t &= \log \left( \frac{P(N_{t} | N_{t-1}, \hat{r}_t, \sigma)}{P(N_{t} | N_{t-1}, r = 0, \sigma)} \right) -->
+<!-- \end{align*} -->
+<a href="https://www.codecogs.com/eqnedit.php?latex=\begin{align*}&space;S_t&space;&=&space;\Sigma^{t}_{i=1}R_i&space;&&space;\text{for&space;}&space;t&space;&=&space;1,2,3,&space;\ldots\\&space;\text{and&space;}&space;R_1&space;&=&space;0&space;&&space;R_t&space;&=&space;\log&space;\left(&space;\frac{P(N_{t}&space;|&space;N_{t-1},&space;\hat{r}_t,&space;\sigma)}{P(N_{t}&space;|&space;N_{t-1},&space;r&space;=&space;0,&space;\sigma)}&space;\right)&space;\end{align*}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\begin{align*}&space;S_t&space;&=&space;\Sigma^{t}_{i=1}R_i&space;&&space;\text{for&space;}&space;t&space;&=&space;1,2,3,&space;\ldots\\&space;\text{and&space;}&space;R_1&space;&=&space;0&space;&&space;R_t&space;&=&space;\log&space;\left(&space;\frac{P(N_{t}&space;|&space;N_{t-1},&space;\hat{r}_t,&space;\sigma)}{P(N_{t}&space;|&space;N_{t-1},&space;r&space;=&space;0,&space;\sigma)}&space;\right)&space;\end{align*}" title="\begin{align*} S_t &= \Sigma^{t}_{i=1}R_i & \text{for } t &= 1,2,3, \ldots\\ \text{and } R_1 &= 0 & R_t &= \log \left( \frac{P(N_{t} | N_{t-1}, \hat{r}_t, \sigma)}{P(N_{t} | N_{t-1}, r = 0, \sigma)} \right) \end{align*}" /></a>
+
 $\\hat{r}\_t$ is the MLE of r computed from data points *X*<sub>1</sub>, …, *X*<sub>*t*</sub>. The MLE is constrained to (0, inf) or ( − inf, 0) depending on whether detection of a linear increase or decrease is desired. (In my computer implementation, I just use a finite interval for the constrained MLE).
 
 The decision rule is:
 
-$$\\begin{align\*}
-    \\begin{cases}
-      \\text{reject } H\_0  & S\_t &gt; \\log(A) \\\\
-      \\text{accept } H\_0 & S\_t \\leq \\log(B) \\\\
-      \\text{continue sampling} & \\log(B) &lt; S\_t  \\leq  \\log(A)
-    \\end{cases}
-\\end{align\*}$$
+<!-- $$\begin{align*} -->
+<!--     \begin{cases} -->
+<!--       \text{reject } H_0  & S_t > \log(A) \\ -->
+<!--       \text{accept } H_0 & S_t \leq \log(B) \\ -->
+<!--       \text{continue sampling} & \log(B) < S_t  \leq  \log(A) -->
+<!--     \end{cases} -->
+<!-- \end{align*}$$ -->
+<a href="https://www.codecogs.com/eqnedit.php?latex=\begin{align*}&space;\begin{cases}&space;\text{reject&space;}&space;H_0&space;&&space;S_t&space;>&space;(A)&space;\\&space;&space;H\_0&space;&&space;S\_t&space;&space;(B)&space;\\&space;&space;&&space;(B)&space;&lt;&space;S\_t&space;&space;(A)&space;\\end{cases}&space;\\end{align\*}" target="\_blank"&gt;<img src="https://latex.codecogs.com/gif.latex?\begin{align*}&space;\begin{cases}&space;\text{reject&space;}&space;H_0&space;&&space;S_t&space;>&space;(A)&space;\\&space;&space;H\_0&space;&&space;S\_t&space;&space;(B)&space;\\&space;&space;&&space;(B)&space;&lt;&space;S\_t&space;&space;(A)&space;\\end{cases}&space;\\end{align\*}" title=" " /&gt;</a>
 
 The thresholds are set following Wald's method such that $A \\sim \\frac{1-\\beta}{\\alpha}$ and $B \\sim \\frac{\\beta}{1-\\alpha}$ where *α* and *β* is the probabilities of type I and II error, respectively (I'm not sure if these approximations work for this inference problem, I still need to check if these boundaries give the correct error probabilities).
 
