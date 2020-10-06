@@ -10,35 +10,20 @@ Wildlife managers and conservationists need to detect population trends in a tim
 
 For example, [White (2019)](https://academic.oup.com/bioscience/article/69/1/40/5195956#129750432) repeatedly fit linear models to sub-samples of a time series to identify the minimum sample size needed to achieve a specified type I error and power. That is, for a time series with *T* time points, he fit a linear regression model to each contiguous sub-samples of size 2, 3, …, *T* − 1. Using the arbitrary (but conventional) benchmark of 0.8 power at the 0.05 significance level, White used the regression outputs to find the minimum sub-sample length such that 80 % of the samples had a significant regression slope coefficient. This is essentially a sample size calculation for a one-sided hypothesis test with *H*<sub>0</sub> : *r* = 0 and *H*<sub>1</sub> : *r* &gt; 0 or *H*<sub>1</sub> : *r* &lt; 0.
 
-White used data simulated from the following population model for examples of how to calculate fixed-sample sizes needed to detect population trends, <!-- $$ N_{t+1} \sim N(N_t + r,\sigma), $$ --> <a href="https://www.codecogs.com/eqnedit.php?latex=N_{t&plus;1}&space;\sim&space;N(N_t&space;&plus;&space;r,\sigma)" target="_blank"><img src="https://latex.codecogs.com/gif.latex?N_{t&plus;1}&space;\sim&space;N(N_t&space;&plus;&space;r,\sigma)" title="N_{t+1} \sim N(N_t + r,\sigma)" /></a>
+White used data simulated from the following population model for examples of how to calculate fixed-sample sizes needed to detect population trends,
+*N*<sub>*t* + 1</sub> ∼ *N*(*N*<sub>*t*</sub> + *r*, *σ*),
 
 Where *N*<sub>*t*</sub> is the population size at time *t*, *r* is the population trend, and *σ* is the population variability.
 
 We can also test this one-sided hypothesis using a sequential test. We can define our sequential test statistic at time *t* (*S*<sub>*t*</sub>) as:
 
-<!-- \begin{align*} -->
-<!-- S_t &= \Sigma^{t}_{i=1}R_i & \text{for } t &= 1,2,3, \ldots\\ -->
-<!-- \text{and } R_1 &= 0 & R_t &= \log \left( \frac{P(N_{t} | N_{t-1}, \hat{r}_t, \sigma)}{P(N_{t} | N_{t-1}, r = 0, \sigma)} \right) -->
-<!-- \end{align*} -->
-<a href="https://www.codecogs.com/eqnedit.php?latex=\begin{align*}&space;S_t&space;&=&space;\Sigma^{t}_{i=1}R_i&space;&&space;\text{for&space;}&space;t&space;&=&space;1,2,3,&space;\ldots\\&space;\text{and&space;}&space;R_1&space;&=&space;0&space;&&space;R_t&space;&=&space;\log&space;\left(&space;\frac{P(N_{t}&space;|&space;N_{t-1},&space;\hat{r}_t,&space;\sigma)}{P(N_{t}&space;|&space;N_{t-1},&space;r&space;=&space;0,&space;\sigma)}&space;\right)&space;\end{align*}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\begin{align*}&space;S_t&space;&=&space;\Sigma^{t}_{i=1}R_i&space;&&space;\text{for&space;}&space;t&space;&=&space;1,2,3,&space;\ldots\\&space;\text{and&space;}&space;R_1&space;&=&space;0&space;&&space;R_t&space;&=&space;\log&space;\left(&space;\frac{P(N_{t}&space;|&space;N_{t-1},&space;\hat{r}_t,&space;\sigma)}{P(N_{t}&space;|&space;N_{t-1},&space;r&space;=&space;0,&space;\sigma)}&space;\right)&space;\end{align*}" title="\begin{align*} S_t &= \Sigma^{t}_{i=1}R_i & \text{for } t &= 1,2,3, \ldots\\ \text{and } R_1 &= 0 & R_t &= \log \left( \frac{P(N_{t} | N_{t-1}, \hat{r}_t, \sigma)}{P(N_{t} | N_{t-1}, r = 0, \sigma)} \right) \end{align*}" /></a>
-
 $\\hat{r}\_t$ is the MLE of r computed from data points *X*<sub>1</sub>, …, *X*<sub>*t*</sub>. The MLE is constrained to (0, inf) or ( − inf, 0) depending on whether detection of a linear increase or decrease is desired. (In my computer implementation, I just use a finite interval for the constrained MLE).
 
 The decision rule is:
 
-<!-- \begin{align*} -->
-<!--     \begin{cases} -->
-<!--       \text{reject } H_0  & S_t > \log(A) \\ -->
-<!--       \text{accept } H_0 & S_t \leq \log(B) \\ -->
-<!--       \text{continue sampling} & \log(B) < S_t  \leq  \log(A)   -->
-<!--     \end{cases} -->
-<!-- \end{align*} -->
-<a href="https://www.codecogs.com/eqnedit.php?latex=\begin{align*}&space;\begin{cases}&space;\text{reject&space;}&space;H_0&space;&&space;S_t&space;>&space;(A)&space;\\&space;&space;H\_0&space;&&space;S\_t&space;&space;(B)&space;\\&space;&space;&&space;(B)&space;&lt;&space;S\_t&space;&space;(A)&space;\\end{cases}&space;\\end{align\*}" target="\_blank"&gt;<img src="https://latex.codecogs.com/gif.latex?\begin{align*}&space;\begin{cases}&space;\text{reject&space;}&space;H_0&space;&&space;S_t&space;>&space;(A)&space;\\&space;&space;H\_0&space;&&space;S\_t&space;&space;(B)&space;\\&space;&space;&&space;(B)&space;&lt;&space;S\_t&space;&space;(A)&space;\\end{cases}&space;\\end{align\*}" title="
-" /&gt;</a>
-
 The thresholds are set following Wald's method such that $A \\sim \\frac{1-\\beta}{\\alpha}$ and $B \\sim \\frac{\\beta}{1-\\alpha}$ where *α* and *β* is the probabilities of type I and II error, respectively (I'm not sure if these approximations work for this inference problem, I still need to check if these boundaries give the correct error probabilities).
 
-For the situation where *σ* is unknown, the sequential test statistic is instead calculated using the current ML estimate of of the standard deviation ($\\hat{\\sigma\_t}$). $\\hat{\\sigma\_t}$ is computed as a [running variance](https://www.johndcook.com/blog/standard_deviation/) from the first differences of the observations <!-- $N_t - N_{t-1} \overset{iid}{\sim} Norm(r,\sigma)$  --> <a href="https://www.codecogs.com/eqnedit.php?latex=N_t&space;-&space;N_{t-1}&space;\overset{iid}{\sim}&space;Norm(r,\sigma)" target="_blank"><img src="https://latex.codecogs.com/gif.latex?N_t&space;-&space;N_{t-1}&space;\overset{iid}{\sim}&space;Norm(r,\sigma)" title="N_t - N_{t-1} \overset{iid}{\sim} Norm(r,\sigma)" /></a> for *t* = 2, 3, 4, …. If we know that there is a lower bound on the variability of the population when it is stable we can use <!-- $\sigma_{t} = max \left( \sigma_{mle},\sigma_{min} \right)$. --> <a href="https://www.codecogs.com/eqnedit.php?latex=\sigma_{t}&space;=&space;max&space;\left(&space;\sigma_{mle},\sigma_{min}&space;\right)" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\sigma_{t}&space;=&space;max&space;\left(&space;\sigma_{mle},\sigma_{min}&space;\right)" title="\sigma_{t} = max \left( \sigma_{mle},\sigma_{min} \right)" /></a>
+For the situation where *σ* is unknown, the sequential test statistic is instead calculated using the current ML estimate of of the standard deviation ($\\hat{\\sigma\_t}$). $\\hat{\\sigma\_t}$ is computed as a [running variance](https://www.johndcook.com/blog/standard_deviation/) from the first differences of the observations $N\_t - N\_{t-1} \\overset{iid}{\\sim} Norm(r,\\sigma)$ for *t* = 2, 3, 4, …. If we know that there is a lower bound on the variability of the population when it is stable we can use *σ*<sub>*t*</sub> = *m**a**x*(*σ*<sub>*m**l**e*</sub>,*σ*<sub>*m**i**n*</sub>).
 
 Comparison of detection times
 =============================
