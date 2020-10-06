@@ -298,7 +298,7 @@ calc_sprt <- function (data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est, 
   # 2nd step of SPRT calculation now sets all NA values to 0 (we can't compare models when we don't have sd_mle yet)
   # 3rd step of SPRT calculation sets all +/-Inf values to NA. When taking cumulative LR we skip NA values
   OUT <- data %>%
-    calc_sr(sd_est = sd_est, sd_min = sd_min) %>%
+    calc_sr(sd_est = sd_est, sd_min = sd_min, reject_reg = reject_reg) %>%
     group_by(simulation) %>%
     mutate(sprt = log(lik1) - log(lik0) ,
            sprt = ifelse(is.na(sprt), 0, sprt),
