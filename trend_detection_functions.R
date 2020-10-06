@@ -30,18 +30,26 @@ run_stat <- function(x) {
 ### simulation functions
 
 # linear population trend model w/ normal process error
-sim_lin_proc <- function (x0, t, trend, sd, runstat = TRUE) {
+sim_lin_proc <- function (x0, t, trend, sd, runstat = TRUE, proc_err = TRUE) {
   # allow for constant trend or vector of varying trends (automatically recycles vector if lenght(trend) < t)
   trend_val = rep(trend, length = t)
   sd_val = rep(sd, length = t)
   
-  pop <- vector("numeric", length = t)
-  pop[1] <- x0
-  for (i in 1:(length(pop) - 1)) {
-    pop[i + 1] <- rnorm(1, pop[i] + trend_val[i], sd_val[i])
+  # run model with proc error or w/o proc error
+  if (proc_err) {
+    pop <- vector("numeric", length = t)
+    pop[1] <- x0
+    for (i in 1:(length(pop) - 1)) {
+      pop[i + 1] <- rnorm(1, pop[i] + trend_val[i], sd_val[i])
+    }
+  } else {
+    pop <- x0 + cumsum(trend_val) + rnorm(t, mean = 0, sd = sd_val)
   }
+  
+  # create df of results
   out <- tibble(time = 1:t, pop = pop, trend = trend_val, sd = sd_val)
   
+  # compute running statistics to use for sequential test calculations
   if(runstat == TRUE){
     out$diff_1 <- out$pop - lag(out$pop)
     running_stats <- run_stat(diff(out$pop))
@@ -58,8 +66,8 @@ obs_model <- function (x, sd) {
 }
 
 # simulate sim_lin_proc nsim times using common parameters
-multi_sim <- function(nsim, x0, t, trend, sd) {
-  simulations <- lapply(1:nsim, function(x) sim_lin_proc(x0, t, trend, sd))
+multi_sim <- function (nsim, x0, t, trend, sd, runstat = TRUE, proc_err = TRUE) {
+  simulations <- lapply(1:nsim, function(x) sim_lin_proc(x0, t, trend, sd, runstat, proc_err))
   return(bind_rows(simulations, .id = "simulation") %>% mutate(simulation = as.numeric(simulation)))
 }
 
