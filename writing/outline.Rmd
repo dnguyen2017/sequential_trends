@@ -90,8 +90,8 @@ calc_lm <- function (data, nsim) {
   # fit lm and extract slope estimates and p-values
   for (i in seq_along(lm_list)) {
     # create empty cols for pval and trend estimate
-    data$pval <- NA
-    data$trend_est <- NA
+    data$pval <- NA_real_
+    data$trend_est <- NA_real_
     
     # grab current time series
     current_ts <- data %>% filter(simulation == i)
@@ -188,8 +188,8 @@ likelihood <- function (x_prev, x_now, sd, interval = c(), guess = 1.5) {
 calc_sr <- function(data, accept_reg = c(0,0), reject_reg = c(0, 5)) {
   
   # initialize empty columns for likelihood calculations
-  data$lik0 <- NA
-  data$lik1 <- NA
+  data$lik0 <- NA_real_
+  data$lik1 <- NA_real_
   
   # parameter space
   theta0 <- accept_reg
@@ -255,16 +255,18 @@ delay_df <-
 ```{r sensitivity_setup, cache = TRUE}
 # sensitivity analysis following Fig. 1 c-d in White 2019
 set.seed(123)
-trend_var <- seq(1, 3, by = 0.2)
+trend_var <- -seq(1, 3, by = 0.2)
 sd_var <- seq(1, 6, by = 0.5)
-trend_cst <- rep(1.5, length = length(sd_var))
+trend_cst <- -rep(1.5, length = length(sd_var))
 sd_cst <- rep(5, length = length(trend_var))
 
 trends <- c(trend_var, trend_cst)
 sds    <- c(sd_cst, sd_var)
 
+n_sims <- 50
+n_steps <- 50
 sensitivity_list <- lapply(seq_along(trends), 
-                           function(x) multi_sim(100, 10^3, 100, trends[x], sds[x]))
+                           function(x) multi_sim(n_sims, 10^3, n_steps, trends[x], sds[x]))
 sens_df <- bind_rows(sensitivity_list)
 ```
 
@@ -277,7 +279,7 @@ sens_df %>%
 
 ```{r sens_sprt, cache = TRUE, dependson="sensitivity_setup"}
 # sprt calculations
-sens_sprt <- sens_df %>% group_by(sd, trend) %>% calc_sr()
+sens_sprt <- sens_df %>% group_by(sd, trend) %>% calc_sr(reject_reg = c(-5,0))
 
 # alpha = 0.05, beta = 0.2 (following White 2019)
 sens_sprt <- 
@@ -353,7 +355,7 @@ calc_sens_lm <- function (data, sds, trends) {
   full_list <- vector("list", length = length(sds)) # each entry is a unique parameter combination
   temp_list <- vector("list", length = nsim)       # each entry is a simulation number for a particular parameter combination
   
-  data$trend_est <- NA; data$pval <- NA
+  data$trend_est <- NA_real_; data$pval <- NA_real_
   for ( i in 1:length(sds)) { # for each parameter combination
     sd_now <- sds[i]
     trend_now <- trends[i]
@@ -394,7 +396,7 @@ calc_sens_lm <- function (data, sds, trends) {
 
 ```{r calc_sens_lm, cache = TRUE, dependson="sensitivity_setup"}
 sens_lm <- 
-  sens_df %>% #filter(time %in% 1:2) %>%
+  sens_df %>% #filter(time %in% 1:50) %>%
   #filter(simulation %in% 1:10) %>%
   #group_by(trend, sd) %>%
   calc_sens_lm(sds = sds, trends = trends) %>%
@@ -402,8 +404,8 @@ sens_lm <-
   get_conclusion(sig_level = 0.05) %>%
     group_by(time, trend, sd) %>% 
   mutate(correct = sum(correct_inference, na.rm = TRUE), 
-         power = correct/100) %>%
-  mutate(sufficient_power = ifelse(correct >= 80, time, NA)) %>%
+         power = correct/max(simulation)) %>%
+  mutate(sufficient_power = ifelse(power >= 0.8, time, NA)) %>%
   group_by(trend, sd) %>%
   mutate(mintime = min(sufficient_power, na.rm = TRUE))
 # 
@@ -440,8 +442,8 @@ sens_lm <-
 # sens_lm %>%
 #   filter(trend == 1.5) %>%
   ggplot() +
-  geom_line(data = filter(sens_lm, trend ==1.5), aes(x = sd, y = mintime), col = "red") +
-  geom_line(data = filter(sens_delay, trend ==1.5), aes(x = sd, y = mean_delay)) +
+  geom_line(data = filter(sens_lm, trend ==unique(trend_cst) ), aes(x = sd, y = mintime), col = "red") +
+  geom_line(data = filter(sens_delay, trend ==unique(trend_cst)), aes(x = sd, y = mean_delay)) +
   lims(y = c(0, 50)) +
   labs(title = "d. Effect of population variability on detection time",
        x = "Population variability (sd)", y = "Time to detection") +
@@ -476,13 +478,13 @@ ggplot(delay_df) +
 ```{r plot_sens_delay, out.width="50%", fig.show = "hold", echo = FALSE}
 line_width  <- 1.5
 sens_delay %>%
-  filter(sd == 5) %>%
+  filter(sd == unique(sd_cst)) %>%
   ggplot() +
   geom_line(aes(x = trend, y = mean_delay), linetype = "solid", size = line_width) +
   geom_line(aes(x = trend, y = p80_delay), linetype = "dashed", size = line_width) +
   geom_line(aes(x = trend, y = p90_delay), linetype = "dotdash", size = line_width) +
   geom_line(aes(x = trend, y = max_delay), linetype = "dotted", size = line_width) +
-  geom_line(data = sens_lm, aes(x = trend, y = mintime), col = "red") +
+  geom_line(data = filter(sens_lm, sd == unique(sd_cst)), aes(x = trend, y = mintime), col = "red") +
   lims(y = c(0, 50)) +
   labs(title = "c. Effect of trend strength on detection time",
        x = "Trend strength (slope coefficient)", y = "Time to detection") +
@@ -490,17 +492,18 @@ sens_delay %>%
   
 
 sens_delay %>%
-  filter(trend == 1.5) %>%
+  filter(trend == unique(trend_cst)) %>%
   ggplot() +
   geom_line(aes(x = sd, y = mean_delay), linetype = "solid", size = line_width) +
   geom_line(aes(x = sd, y = p80_delay), linetype = "dashed", size = line_width) +
   geom_line(aes(x = sd, y = p90_delay), linetype = "dotdash", size = line_width) +
   geom_line(aes(x = sd, y = max_delay), linetype = "dotted", size = line_width) +
-  geom_line(data = sens_lm, aes(x = sd, y = mintime), col = "red") +
+  geom_line(data = filter(sens_lm, trend == unique(trend_cst)), aes(x = sd, y = mintime), col = "red") +
   lims(y = c(0, 50)) +
   labs(title = "d. Effect of population variability on detection time",
        x = "Population variability (sd)", y = "Time to detection") +
   my_theme()
+
 ```
 
 For panels c and d: 
