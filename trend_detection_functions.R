@@ -7,7 +7,7 @@ run_stat <- function(x) {
   
   # init vectors for statistics
   m_ <- vector("numeric", length = length(x)) 
-  s_ <- s2_mle <- sd_mle <- s2_ <- sd_ <- m_
+  s_ <- sd_0 <- s_0 <- s2_mle <- sd_mle <- s2_ <- sd_ <- m_
   
   # init value of mean is x1. All other init values are 0
   m_[1] <- x[1]
@@ -20,10 +20,13 @@ run_stat <- function(x) {
     sd_mle[i] <- sqrt(s2_mle[i])
     s2_[i] <- s_[i]/(i-1)
     sd_[i] <- sqrt(s2_[i])
+    # under null that r = 0
+    s_0[i] <- s_0[i-1] + (x[i] - 0) * (x[i] - 0)
+    sd_0[i] <- sqrt(s_0[i]/i)
   }
   
   # return: id = observation number, obs = observation value, mu_mle, sd_mle, sd_corrected
-  return(tidyr::tibble(diff_1 = x, mu_mle = m_, sd_mle, sd_corrected = sd_)) # %>% tibble::rowid_to_column(var = "id"))
+  return(tidyr::tibble(diff_1 = x, mu_mle = m_, sd_mle, sd_corrected = sd_, sd_null = sd_0)) # %>% tibble::rowid_to_column(var = "id"))
   #return(tidyr::tibble(diff_1 = c(NA,x), mu_mle = c(NA,m_), sd_mle = c(NA,sd_mle), sd_corrected = c(NA,sd_) )) # %>% tibble::rowid_to_column(var = "id"))
 }
 
@@ -245,15 +248,17 @@ calc_sr <- function(data, accept_reg = c(0,0), reject_reg = c(0, 5), sd_est, sd_
     # observed states and known pars
     x0 <- unlist(data[i-1, "pop"])
     x1 <- unlist(data[i, "pop"])
-    sd <- unlist(data[i, sd_est])
+    sd <- unlist(data[i, sd_est]) # unquoted because sd_est is an arg not a column name
+    sd_null <- unlist(data[i, "sd_null"])
     
     # if estimate of sd is invalid skip calculation
-    if(is.na(sd) == TRUE || sd <= 0) next
+    if( (is.na(sd) || sd <= 0) |  (is.na(sd_null) || sd_null <= 0)) next
     # replace sd if lower than minimum (default sd_min == 0)
     sd <- max(sd_min, sd)
+    sd_null <- max(sd_null, sd_min)
     
     # likelihood calculation
-    data[i,"lik0"] <- dnorm(x = x1, mean = x0, sd = sd) # H0: x_t+1 ~ N(x_t, sd)
+    data[i,"lik0"] <- dnorm(x = x1, mean = x0, sd = sd_null) # H0: x_t+1 ~ N(x_t, sd)
     data[i,"lik1"] <- likelihood(x_prev = x0, x_now = x1, sd = sd,  # p(x_now | x_prev, disp, theta \in Theta_1)
                                  interval = theta1, guess = guess1)
   }
