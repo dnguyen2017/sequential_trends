@@ -182,6 +182,15 @@ delay_df %>%
 
 Note, the probability models used for the fixed-sample and sequential tests are not the same. The sequential test uses the true data-generating model (variability is from process noise) whereas the fixed-sample test fits a simple linear regression using time as a covariate (observation noise). A more comparable test would be to use a sequential t-test on the first-differenced values of the population sizes. 
 
+
+# Comparison of sample sizes for different population trends and variability
+
+As a comparison to figure 1. c-d in White (2019) I ran simulations to assess how the performance of the sequential test performs relative to the fixed sample test for the same trend and sd values used by WHite. For these values, the average sample size needed of the sequential test needed to detect a trend is rougly equal to as little as half the samples needed under the fixed sample test.
+
+![](sens_trend_strength_plot.png) 
+
+![](sens_var_strength_plot.png) 
+
 # Performance when null is true (no trend)
 
 ```{r simulation_null, cache=T}
