@@ -23,10 +23,10 @@ t_ <- 100
 pop_df <- multi_sim(nsim = numsim, x0 = x0_, t = t_, trend = trend_, sd = sd_)
 ```
 
-# Trend detection: sequential vs fixed sample approaches
+# Trend detection
 Wildlife managers and conservationists need to detect population trends in a timely and reliable manner. Timeliness is reflected in the number of samples (e.g., years) needed to detect a trend. Reliability is captured by the type I error and power of a test. Simple linear regression using sampling time as a covariate is commonly used to detect population trends. Researchers have used this approach to identify the minimum years of monitoring needed to detect population trends.
 
-For example, [White (2019)](https://academic.oup.com/bioscience/article/69/1/40/5195956#129750432) repeatedly fit linear models to sub-samples of a time series to identify the minimum sample size needed to achieve a specified type I error and power. That is, for a time series with $T$ time points, he fit a linear regression model to each contiguous sub-samples of size $2, 3, \ldots, T-1$. Using the arbitrary (but conventional) benchmark of 0.8 power at the 0.05 significance level, White used the regression outputs to find the minimum sub-sample length such that 80 % of the samples had a significant regression slope coefficient. This is essentially a sample size calculation for a one-sided hypothesis test with $H_0: r = 0$ and $H_1: r > 0$ or $H_1: r < 0$.
+For example, [White (2019)](https://academic.oup.com/bioscience/article/69/1/40/5195956#129750432) repeatedly fit linear models to sub-samples of a time series to identify the minimum sample size needed to achieve a specified type I error and power. That is, for a time series with $T$ time points, he fit a linear regression model to each contiguous sub-samples of size $2, 3, \ldots, T-1$. Using the arbitrary (but conventional) benchmark of 0.8 power at the 0.05 significance level, White used the regression outputs to find the minimum sub-sample length such that 80 % of the samples had a significant regression slope coefficient of the correct sign. This is essentially a sample size calculation for a one-sided hypothesis test with $H_0: r = 0$ and $H_1: r > 0$ or $H_1: r < 0$.
 
 White used data simulated from the following population model for examples of how to calculate fixed-sample sizes needed to detect population trends,
 $$ N_{t+1} \sim N(N_t + r,\sigma), $$
@@ -55,6 +55,11 @@ The thresholds are set following Wald's method such that $A \sim \frac{1-\beta}{
 
 For the situation where $\sigma$ is unknown, the sequential test statistic is instead calculated using the current ML estimate of of the standard deviation ($\hat{\sigma_t}$). $\hat{\sigma_t}$ is computed as a [running variance](https://www.johndcook.com/blog/standard_deviation/) from the first differences of the observations $N_t - N_{t-1} \overset{iid}{\sim} Norm(r,\sigma)$ for $t = 2,3,4,\ldots$. If we know that there is a lower bound on the variability of the population when it is stable we can use $\sigma_{t} = max \left( \sigma_{mle},\sigma_{min} \right)$.
 
+# Potential advantages of sequential vs fixed-sample size tests
+
+1. **Efficiency**: Sequential tests often require only an average of 40-50 % of the samples needed to make a decision compared to a corresponding fixed sample test. If decisions are made on the basis of null hypothesis testing then management decisions could be made sooner using sequential tests rather than fixed sample size tests.
+1. **Controlled error rates**: It is well known that the repeated application of fixed sample size hypothesis tests inflates the probability of rejecting the null when it is true (type I error). If a manager wanted to test for a trend and control their type I error, they may only test for a trend once after a pre-determined number of observations. Until that time, the manager could not draw any conclusions from their data using any formal hypothesis tests. On the other hand, sequential tests are designed to be applied after every observation until a conclusion is drawn while controlling type I error. Therefore, sequential tests are more appropriate than fixed sample size tests for continuously monitoring a population.
+
 # Comparison of detection times
 
 Tests:
@@ -63,7 +68,7 @@ Tests:
 1. sequential test ($\sigma$ known)
 1. sequential test ($\sigma$ unknown)
     + the running MLE estimate of $\sigma$ is used to calculate the test statistic
-    + note that the MLE estimate of $\sigma$ is uncorrected (biased low)
+    + note that the MLE estimate of $\sigma$ is uncorrected (biased low) but this bias is negligable as the number of observations increases
 
 I compare the performance of the tests according to the time required to reject the null hypothesis that there is no population trend ($\alpha = 0.05, \beta=0.2$). The population data were simulated from an additive model $N_{t+1} = N(N_t + r,\sigma)$ with parameters $r =$ `r trend_` and $\sigma =$ `r sd_`. The population was initialized as `r x0_` individuals and was run for `r t_` time steps. `r numsim` simulations were used.
 
@@ -161,12 +166,13 @@ samplesize_df <-
   get_power(power_level = 0.8, nsim = numsim)
 ```
 
-The fixed-sample size needs `r unique(samplesize_df$mintime)` samples to achieve 0.8 power at the 0.05 significance level. In comparison, the sequential tests require `r delay_df %>% filter(method == "delay_known") %>% pull(mean_delay) %>% unique() %>% ceiling()` ($\sigma$ known) and `r delay_df %>% filter(method == "delay_est") %>% pull(mean_delay) %>% unique() %>% ceiling()` ($\sigma$ unknown and $\sigma_{min} =$ `r sd_lower`). The reason that the sequential test where $\sigma$ is unknown detects the change faster than when $\sigma$ is known (for the parameters used here) is because the MLE estimate of $\sigma$ is uncorrected which biases it low. This makes the likelihood of the null smaller than it should be. The table belows shows the number of instances either sequential method required as many or more samples than the fixed-sample size test.
+The fixed-sample size test needs `r unique(samplesize_df$mintime)` samples to achieve 0.8 power at the 0.05 significance level. In comparison, the sequential tests require `r delay_df %>% filter(method == "delay_known") %>% pull(mean_delay) %>% unique() %>% ceiling()` ($\sigma$ known) and `r delay_df %>% filter(method == "delay_est") %>% pull(mean_delay) %>% unique() %>% ceiling()` ($\sigma$ unknown and $\sigma_{min} =$ `r sd_lower`). 
+<!-- The reason that the sequential test where $\sigma$ is unknown detects the change faster than when $\sigma$ is known (for the parameters used here) is because the MLE estimate of $\sigma$ is uncorrected which biases it low. This makes the likelihood of the null smaller than it should be.  -->
+The table belows shows the number of instances either sequential method required as many or more samples than the fixed-sample size test.
 
 ```{r}
 samplesize <- unique(samplesize_df$mintime)
 delay_df %>% count(delay >= samplesize) %>% knitr::kable()
-
 ```
 
 ```{r warning=FALSE}
@@ -185,7 +191,7 @@ Note, the probability models used for the fixed-sample and sequential tests are 
 
 # Comparison of sample sizes for different population trends and variability
 
-As a comparison to figure 1. c-d in White (2019) I ran simulations to assess how the performance of the sequential test performs relative to the fixed sample test for the same trend and sd values used by WHite. For these values, the average sample size needed of the sequential test needed to detect a trend is rougly equal to as little as half the samples needed under the fixed sample test.
+As a comparison to figure 1. c-d in White (2019) I ran simulations to assess how the performance of the sequential test performs relative to the fixed sample test for the same trend and sd values used by White. For these values, the average sample size needed for the sequential test to detect a trend is roughly equal to as little as half the samples needed under the fixed sample test. This implies that in terms of timeliness, there may not be an advantage to the sequential test compared to the fixed sample size test when the magnitude of a trend is large or when variability is low. However, the fixed sample size test cannot be used to repeatedly test for the evidence of a trend due to multiple testing issues as mentioned earlier whereas the sequential test can be used repeatedly as the samples accrue. 
 
 ![](sens_trend_strength_plot.png) 
 
@@ -327,7 +333,7 @@ sprt_est_alt %>% filter(sprt_est %in% c(-Inf,Inf)) %>%
 
 # Performance on Gompertz model
 
-The Gompertz model is commonly used to model population dynamics. 
+The Gompertz model is commonly used to model population dynamics. It is more appropriate as a null model of no trend since it perturbations away from the carrying capacity return to the carrying capacity which is a more realistic model a stable population than the random walk model.
 
 \begin{align*}
 X_{t+1} &= \lambda + b (X_t) + N(0, \sigma^2)
@@ -341,16 +347,16 @@ $X_t$ is the log population size at time $t$, $\lambda$ is the population growth
 <!-- b = \text{magnitude of density dependence } (b = 0.65)\\ -->
 <!-- \sigma^2 = \text{process error } (\sigma^2=0.16)$ -->
 
-$\text{log-Gompertz: } X_{t+1} = \lambda + b (X_t) + \delta\\
-X_t = \text{log-abundance at time t }\\
-\delta \sim N(0,\sigma^2) \text{ (process noise)}\\
-X_0 = \log(1000)\\
-\lambda = 2.4 \text{ (population growth rate) }\\
-b = 0.65 \text{ (density dependence)}\\
-\sigma^2 = 0.16$
+<!-- $\text{log-Gompertz: } X_{t+1} = \lambda + b (X_t) + \delta\\ -->
+<!-- X_t = \text{log-abundance at time t }\\ -->
+<!-- \delta \sim N(0,\sigma^2) \text{ (process noise)}\\ -->
+<!-- X_0 = \log(1000)\\ -->
+<!-- \lambda = 2.4 \text{ (population growth rate) }\\ -->
+<!-- b = 0.65 \text{ (density dependence)}\\ -->
+<!-- \sigma^2 = 0.16$ -->
 
 
-```{r}
+```{r cache=TRUE}
 nsim = 100
 test <- sim_log_gomp(xinit = log(1000), lambda =  2.4, b = 0.65, phi = 0, sd_proc = 0.4, sd_obs = 0, tfinal = 100, nsim = nsim)
 
@@ -388,13 +394,15 @@ delay_gomp %>%
        y = "frequency of false positives")
 ```
 
-Again, the sequential tests all eventually reject the null in favor of the hypothesis that the population is growing. But the fixed-sample test actuallly performs very well. I'm not sure why the sequential test are so bad. Note that I am using a one-sided alternative for the sequential tests here ($H_1: r > 0$) but I don't think that would account for the poor performance.
+After about 25 years the sequential tests all reject the null in favor of the hypothesis that the population is growing. I'm not sure why the sequential tests perform so badly. While I am using a one-sided alternative for the sequential tests here ($H_1: r > 0$) I don't think that would account for the poor performance. Maybe is an issue with the likelihood model? Or the decision boundaries? A potential fix for this issue would be to use a composite null hypothesis ($H_0: r \in [r_{01},r_{02}]$ where $r_{01} < r_{02}$) instead of the current point null hypothesis that the trend is 0 ($H_0: r = 0$). The bounds of the composite null can be chosen according to specific management objectives or IUCN red list criteria. 
 
-Maybe is an issue with the likelihood model? Or th decision boundaries?
+The type 1 error of the fixed-sample test never exceeds 50 % for the sample sizes considered here. While this exceeds the nominal type I error (0.05) it is less than the type I error for the sequential test. Although, even the fixed-sample size procedure would reject the null hypothesis with probability 1 as the sample size increases because the t-test statistic is an increasing function of the sample size. Additionaly, recall that the sub-sampling procedure that ecologists use for power calculations only rejects the null at least $1 - \beta$ (80 %) of the individual regressions fit to the independentlys generated time series rejects the null hypothesis. In practice, an ecologist would only have one time series, and would only be able to fit the model and draw a conclusion once after the pre-determined number of samples have been taken if they wanted to maintain a type I error probability of $\alpha$.
+
+
 
 ```{r eval = FALSE}
 # try using iid normal as data to test performance when null is true
-test <- test %>% mutate(pop = rnorm(n = 10000, mean = 0, sd = 0.4))
+test <- test %>% mutate(pop = rnorm(n = 10000, mean = 0, sd = 0.1))
 
 # note that the sd_mle is not correct here
 delay_gomp <- 
@@ -410,7 +418,7 @@ test %>%  #rename(pop = log_x) %>%
   count(decision_est, name = "n_est"))
 
 mintime_gomp <- test %>% mutate(trend = 0) %>%  #rename(pop = log_x) %>% 
-  seq_lm(nsim = 10) %>% get_conclusion(sig_level = 0.05) %>%
+  seq_lm(nsim = nsim) %>% get_conclusion(sig_level = 0.05) %>%
       group_by(time) %>%
     count(type_error) %>%
     filter(type_error %in% c("significant_true","significant_false") )
@@ -437,7 +445,7 @@ rbind(no_trend, trend_60) %>%
 ```
 
 
-# to-dos
+<!-- # to-dos -->
 
-* test performance on time-series with no trend (should be stationary dist'n; include burn-in time)
-* simulation studies using different trends and sd
+<!-- * test performance on time-series with no trend (should be stationary dist'n; include burn-in time) -->
+<!-- * simulation studies using different trends and sd -->
