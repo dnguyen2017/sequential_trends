@@ -1,0 +1,265 @@
+---
+title: "Sequential t-test"
+author: "David Nguyen"
+date: "Compliled on `r Sys.Date()`"
+output:
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+# Testing for linear and exponential population trends
+
+Stochastic linear trends in population size $N_t$ for $t = 0,1,2, \ldots, T$ can be described as a Gaussian random walk with drift $r$ and environmental process standard deviation $\sigma$.
+
+\begin{align}
+N_{t+1} & \sim Normal(n_t + r, \sigma) \\
+N_{0} & = n_0
+\end{align}
+
+This can also be used as a model of the log-population size $X_t$ of a model with stochastic exponential growth model with lognormal environmental noise.
+
+\begin{align}
+X_{t+1} & \sim Normal(x_t + r, \sigma) \\
+X_{0} & = x_0
+\end{align}
+
+The first differences of the observed population sizes are 
+
+\begin{align}
+d_1, \ldots, d_{T-1} & =  
+\begin{cases}
+n_1 - n_0, \ldots, n_T - n_{T-1} \text{ for linear model} \\
+x_1 - x_0, \ldots, x_T - x_{T-1} \text{ for exponential model} \\
+\end{cases} \\
+                     & \overset{iid}\sim Normal(r, \sigma) \\
+\end{align}
+
+Since the first difference are independent and identically distributed normal with mean equal to the (additive) linear or exponential (multiplicative) trend we can test for non-zero trends using the null hypothesis of $r = 0$ and alternative hypothesis $r \neq 0$.
+
+```{r}
+run_stat <- function(x,
+                     alternative = NA,
+                     null = 0) {
+  # add checks here
+  
+  # init vectors for statistics
+  m_ <- vector("numeric", length = length(x))
+  s_ <- sd_0 <- s_0 <- s2_mle <- sd_mle <- s2_ <- sd_ <- m_
+  
+  if (is.na(alternative)) { # if alternative hypothesis is one sided and composite
+    # init value of mean is x1. All other init values are 0
+    m_[1] <- x[1]
+    
+    # calculate running statistics
+    for (i in 2:length(x)) {
+      m_[i] <- m_[i - 1] + (x[i] - m_[i - 1]) / i
+      s_[i]  <- s_[i - 1] + (x[i] - m_[i - 1]) * (x[i] - m_[i])
+      s2_mle[i] <- s_[i] / (i)
+      sd_mle[i] <- sqrt(s2_mle[i])
+      s2_[i] <- s_[i] / (i - 1)
+      sd_[i] <- sqrt(s2_[i])
+      # under null that r = 0
+      s_0[i] <- s_0[i - 1] + (x[i] - 0) * (x[i] - 0)
+      sd_0[i] <- sqrt(s_0[i] / i)
+    }    
+    
+  } else { # if alternative is point hypothesis
+    m_[1] <- alternative
+    # calculate running statistics
+    for (i in 2:length(x)) {
+      m_[i] <- alternative + (x[i] - alternative) / i
+      s_[i]  <- s_[i - 1] + (x[i] - alternative) * (x[i] - alternative)
+      s2_mle[i] <- s_[i] / (i)
+      sd_mle[i] <- sqrt(s2_mle[i])
+      #s2_[i] <- s_[i]/(i-1)
+      #sd_[i] <- sqrt(s2_[i])
+      # under null that r = 0
+      s_0[i] <- s_0[i - 1] + (x[i] - null) * (x[i] - null)
+      sd_0[i] <- sqrt(s_0[i] / i)
+    }
+  }
+  # return: id = observation number, obs = observation value, mu_mle, sd_mle, sd_corrected
+  return(tidyr::tibble(
+    diff_1 = x,
+    mu_mle = m_,
+    sd_mle,
+    #sd_corrected = sd_,
+    sd_null = sd_0
+  )) # %>% tibble::rowid_to_column(var = "id"))
+  #return(tidyr::tibble(diff_1 = c(NA,x), mu_mle = c(NA,m_), sd_mle = c(NA,sd_mle), sd_corrected = c(NA,sd_) )) # %>% tibble::rowid_to_column(var = "id"))
+}
+
+# apply FUNC cumulatively when NA are present
+# https://stackoverflow.com/questions/25576358/calculate-cumsum-while-ignoring-na-values/25576972
+cumSkipNA <- function(x, FUNC)
+{
+  d <- deparse(substitute(FUNC))
+  funs <- c("max", "min", "prod", "sum")
+  stopifnot(is.vector(x), is.numeric(x), d %in% funs)
+  FUNC <- match.fun(paste0("cum", d))
+  x[!is.na(x)] <- FUNC(x[!is.na(x)])
+  x
+}
+
+```
+
+### naive sequential test
+
+Here I test simple null ($H_0: r = 0$) and alternative ($H_1: r = 0.1$) hypotheses using the likelihood ratio of sequential maximum likelihood estimates.
+
+```{r}
+seq_test <- function(diffs, min_effect = NA, true_effect = NA, type1, type2) {
+  
+  # run sequential test on first differences
+  out <-
+    run_stat(diffs, alternative = min_effect, null = 0) %>% # compute running mean and standard deviation
+    mutate(loglik_alt = dnorm(x = diff_1, mean = min_effect,#max(c(min_effect, mu_mle), na.rm = TRUE) , 
+                              sd = sd_mle, log = TRUE),   # loglik of difference under alternative
+           loglik_null = dnorm(x = diff_1, mean = 0, sd = sd_null, log = TRUE)) %>%  # loglik of difference under null
+    mutate(loglik_alt = ifelse(is.infinite(loglik_alt), NA, loglik_alt), # remove inital NA value of each log likelihood
+           loglik_null = ifelse(is.infinite(loglik_null), NA, loglik_null)) %>%
+    mutate(llr = cumSkipNA(loglik_alt, sum) - cumSkipNA(loglik_null, sum)) %>% # get loglikelikhood ratio
+    mutate(upper = log( (1-type2) / type1), # compute wald decision boundaries
+           lower = log( type2 / (1 - type1))) %>%
+    mutate(decision = case_when(llr <= upper & llr >= lower ~ "?", # get decision
+                                llr > upper ~ "H1",
+                                llr < lower ~ "H0")) %>%
+    # add other info
+    mutate(time = row_number() + 1, # define timepoints
+           true_effect = true_effect,
+           min_effect = min_effect,
+           type1 = type1,
+           type2 = type2) 
+  return(out)
+}
+
+get_decision <- function(data) {
+    
+    # get time of decision
+    out <- data %>% 
+      filter(decision != "?") %>% 
+      arrange(time) %>%
+      slice(1) %>%
+      select(time, decision, min_effect, true_effect, type1, type2)
+    # get naive trend estimate
+    out$trend <- data %>% pull(diff_1) %>% mean(na.rm = TRUE)
+    return(out)
+}
+
+```
+
+
+```{r eval = FALSE, echo = FALSE}
+d_true <- 0.9
+d_relevant <- 0.1
+x <- rnorm(n = 100, mean = d_true, sd = 1)
+(seq_df <- seq_test(x, min_effect = d_relevant, true_effect = d_true, type1 = 0.05, type2 = 0.2))
+(result_df <- get_decision(seq_df))
+```
+
+
+```{r cache = TRUE}
+set.seed(123)
+
+# set params
+nreplicates <- 100
+effect_size <- seq(0.25, by = 0.5, length.out = 5)
+d_true_vec <- rep(effect_size, each = nreplicates)
+d_relevant_vec <- rep(0.5, length = length(d_true_vec))
+tmax <- 100
+
+# simulate differences
+diff_list <- lapply(seq_along(d_true_vec), function(x) rnorm(n = tmax, mean = d_true_vec[x], sd = 1))
+
+# get result of naive sequential test
+# simple null and simple alternative
+seq_test_list <-
+  lapply(seq_along(d_true_vec), function(x)
+       seq_test(diff_list[[x]], min_effect = d_relevant_vec[x], true_effect = d_true_vec[x], 
+                type1 = 0.05, type2 = 0.2))
+
+# get decision, sample size, and trend estimate
+# simple null and alternative
+seq_result_df <-
+  lapply(seq_test_list, function(x) get_decision(x)) %>%
+  bind_rows()
+```
+
+```{r}
+seq_result_df %>%
+  group_by(min_effect, true_effect) %>%
+  summarise(accept = sum(decision == "H0")/nreplicates,
+            reject = sum(decision == "H1")/nreplicates,
+            no_decision = 1 - accept - reject,
+            asn = ceiling(mean(time)),
+            trend = mean(trend)) %>%
+  knitr::kable(digits = 2)
+```
+
+Note that the average sample number (asn) increases as the difference between the alternative hypothesis and true effect size increases. This is because both the null and alternative are unlikely given the observed data.
+
+The empirical error probabilities exceed the nominal error probabilities when $H_0$ is false ($r = 0.25$) the empirical type I error is $0.28$. However, the bounds on type I and II error probability are satisfied for all other parameter values.
+
+```{r}
+seq_test_df <- seq_test_list %>% bind_rows(.id = "sim")
+
+seq_test_df %>%
+  group_by(sim) %>%
+  mutate(time = row_number() + 1) %>%
+  ggplot() +
+  geom_line(aes(x = time, y = llr, group = sim), alpha = 0.3) +
+  geom_hline(aes(yintercept = upper), linetype = "dashed", col = "red") +
+  geom_hline(aes(yintercept = lower), linetype = "dashed", col = "red") +
+  facet_wrap(~true_effect) +
+  ylim(-2, 3) +
+  labs(title = "Sequential log-likelihood ratios",
+       caption = "Accept H0 (H1) if LLR exceeds lower (upper) bound",
+       y = "log-likelihood ratio",
+       x = "sample")
+```
+
+
+```{r}
+seq_result_df %>%
+  mutate(error = trend - true_effect) %>%
+  ggplot() +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 1.2) +
+  geom_point(aes(x = time, y = error, col = decision), alpha = 0.5) +
+  facet_wrap(~true_effect) +
+  labs(title = "Error of trend estimate upon decision",
+       x = "sample",
+       y = "(estimated trend) - (true trend)")
+```
+
+
+### sample size for fixed-sample one-sided t test
+```{r}
+# fixed sample size effect size for one sided t-test
+# assume sd is known
+tibble(effect_size = effect_size) %>%
+  rowwise() %>%
+  mutate(sample_size =  power.t.test(delta = effect_size, sd = 1, sig.level = 0.05, power = 0.8, 
+                                     type = "one.sample", alternative = "one.sided")$n,
+         sample_size = ceiling(sample_size)) %>%
+  # rowwise() %>%
+  # mutate(sample_size = power_t$n)
+  knitr::kable()
+```
+
+Sample size calculations for the fixed sample test assume that the unknown parameters $r,\sigma$ are known. For these sample size calculations I set a 0.05 type I error rate, 0.8 power which is the same as the nominal error probabilities for the sequential test.
+
+```{r eval = FALSE}
+seq_result_df
+
+seq_test(diff_list[[1]], min_effect = d_relevant, true_effect = d_true, type1 = 0.05, type2 = 0.2) %>% get_decision()
+
+sprt.t.test(x = diff_list[[400]][1:7], d = 0.5, alpha = 0.05, power = 0.8, alternative = "greater")
+
+t.test(x = diff_list[[400]][1:7], d = 0.5, alpha = 0.05, alternative = "greater")
+```
+
