@@ -170,7 +170,8 @@ set.seed(123)
 nreplicates <- 100
 effect_size <- seq(0.25, by = 0.5, length.out = 5)
 d_true_vec <- rep(effect_size, each = nreplicates)
-d_relevant_vec <- rep(0.5, length = length(d_true_vec))
+d_relevant <- 0.5
+d_relevant_vec <- rep(d_relevant, length = length(d_true_vec))
 tmax <- 100
 
 # simulate differences
@@ -297,7 +298,7 @@ rep_t_df %>%
 ```
 
 
-```{r table_opt_stopping}
+```{r table_opt_stopping, warning = FALSE}
 rep_t_df %>%
   group_by(true_effect) %>%
   summarise(accept = sum(decision == "H0")/n(),
@@ -318,6 +319,84 @@ sprt.t.test(x = diff_list[[400]][1:7], d = 0.5, alpha = 0.05, power = 0.8, alter
 
 t.test(x = diff_list[[400]][1:7], d = 0.5, alpha = 0.05, alternative = "greater")
 ```
+
+# Sequential t-test
+
+```{r warning = FALSE}
+# x <- diff_list[[1]]
+d <- d_relevant
+type1 <- 0.05
+type2 <- 0.2
+upper <- log( (1-type2) / type1)
+lower <- log( type2 / (1 - type1))
+
+# initialize list to store results for each timeseries
+ts_list <- vector("list", length = length(diff_list))
+
+# initialize vectors to store likelihood and decision
+llr_vec <- estimate_vec <- stderr_vec <- vector("numeric", length = tmax)
+decision_vec <- vector("character", length = tmax)
+
+for (tseries in seq_along(diff_list)) {
+  for (samp in 2:tmax) {
+    # calc t test repeatedly as data "accumulates"
+    current_t <- t.test(diff_list[[tseries]][1:samp], alternative = "greater")
+    ncp <- d * sqrt(samp)
+    llr_vec[samp] <- dt(current_t$statistic, df = (samp - 1), ncp = ncp, log = TRUE) - 
+               dt(current_t$statistic, df = (samp - 1), log = TRUE)
+    
+    # stop if llr outside of continuation region
+    decision_vec[samp] <- case_when(llr_vec[samp] <= upper & llr_vec[samp] >= lower ~ "?", # get decision
+                                llr_vec[samp] > upper ~ "H1",
+                                llr_vec[samp] < lower ~ "H0")
+    
+    # grab updated trend estimate and standard error after every new observation
+    estimate_vec[samp] <- current_t$estimate
+    stderr_vec[samp] <- current_t$stderr
+}
+ts_list[[tseries]] <- tibble(x = diff_list[[tseries]], 
+                             true_effect = d_true_vec[tseries],
+                             relevant_effect = d,
+                             llr = llr_vec, 
+                             decision = decision_vec,
+                             trend = estimate_vec,
+                             stderr = stderr_vec) 
+}
+
+seq_t_df <- bind_rows(ts_list, .id = "sim") %>% mutate(sim = as.numeric(sim))
+
+```
+
+```{r}
+# get df of rows where first decision is made
+seq_t_result <- 
+  seq_t_df %>%
+  group_by(sim) %>%
+  mutate(time = row_number()) %>%
+  filter(decision == "H0" | decision == "H1") %>%
+  slice(1)
+
+# get operating characteristics of test
+seq_t_result %>%  
+  group_by(true_effect) %>%
+  summarise(accept = sum(decision == "H0")/nreplicates,
+            reject = sum(decision == "H1")/nreplicates,
+            no_decision = 1 - accept - reject,
+            asn = ceiling(mean(time)),
+            trend = mean(trend)) %>%
+  knitr::kable(digits = 2)
+  
+```
+
+```{r}
+seq_t_result %>%
+  ggplot() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point(aes(x = time, y = trend - true_effect, col = decision)) +
+  facet_wrap(~true_effect) +
+  labs(title = "Uncorrected trend estimates for sequential t-test")
+```
+
 
 ```{r eval = FALSE}
 arima.sim(list(order = c(1,0,0), ar = 0.5, sd = 0.1), n = 100) %>% plot()
