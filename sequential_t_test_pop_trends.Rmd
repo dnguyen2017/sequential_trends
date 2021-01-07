@@ -419,6 +419,77 @@ seq_t_result %>%
 
 There are clear problems with the estimates obtained after stopping using the sequential t-test. All estimates are biased in the direction of the hypothesis that is accepted.
 
+# Sequential maximum likelihood ratio tests
+
+### Point null hypothesis
+
+```{r}
+type1 <- 0.05
+type2 <- 0.2
+upper <- log( (1-type2) / type1)
+lower <- log( type2 / (1 - type1))
+
+seq_ml_test_list <- vector("list", length = length(diff_list))
+
+for (tseries in seq_along(diff_list)) {
+  # get sequential ml estimates for current time series
+  x <- diff_list[[tseries]]
+  seq_mle <- run_stat(x)
+  mu_vec <- seq_mle$mu_mle
+  sd_mle_vec <- seq_mle$sd_mle
+  sd_null_vec <- seq_mle$sd_null
+  
+  # initialize vectors to store LLR and decision
+llr_vec <- vector("numeric", length = length(x))
+decision_vec <- vector("numeric", length = length(x))
+for (samp in 2:length(x)) {
+  # compute log-likelihood ratio for observations 1:samp
+  llr_vec[samp] <- sum(dnorm(x[1:samp], mean = mu_vec[samp], sd = sd_mle_vec[samp], log = TRUE)) -
+                    sum(dnorm(x[1:samp], mean = 0, sd = sd_null_vec[samp], log = TRUE))
+  # stop if llr outside of continuation region
+    decision_vec[samp] <- case_when(llr_vec[samp] <= upper & llr_vec[samp] >= lower ~ "?", # get decision
+                                llr_vec[samp] > upper ~ "H1",
+                                llr_vec[samp] < lower ~ "H0")
+  }
+seq_ml_test_list[[tseries]] <- tibble(x = x, 
+                             true_effect = d_true_vec[tseries],
+                             llr = llr_vec, 
+                             decision = decision_vec,
+                             trend = mu_vec,
+                             sd = sd_mle_vec) 
+}
+
+seq_ml_df <- bind_rows(seq_ml_test_list, .id = "sim") %>% mutate(sim = as.numeric(sim))
+
+```
+
+```{r}
+seq_ml_result <-
+  seq_ml_df %>%
+  group_by(sim) %>%
+  mutate(time = row_number()) %>%
+  filter(decision == "H0" | decision == "H1") %>%
+  slice(1)
+
+seq_ml_result %>%
+  group_by(true_effect) %>%
+  summarise(accept = sum(decision == "H0")/nreplicates,
+            reject = sum(decision == "H1")/nreplicates,
+            no_decision = 1 - accept - reject,
+            asn = ceiling(mean(time)),
+            trend = mean(trend)) %>%
+  knitr::kable(digits = 2)
+```
+
+```{r}
+seq_ml_result %>%
+  ggplot() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point(aes(x = time, y = trend - true_effect, col = decision)) +
+  facet_wrap(~true_effect) +
+  labs(title = "Trend estimates for sequential maximum LRT")
+```
+
 # Conclusion
 
 I will probably focus more on ad-hoc sequential maximum likelihood ratio tests over the sequential t-test. While the Wald decision boundary apporximations don't necessarily work for an these ad-hoc procedures it will be possible to obtain boundaries through simulation that yield error probabilities set by the researcher.
@@ -437,6 +508,54 @@ I will probably focus more on ad-hoc sequential maximum likelihood ratio tests o
 
 * Check if the resampling method for power analyses commonly used by ecologists actually makes sense
 * Reformulate as Bayesian sequential decision problems
+
+```{r}
+knitr::knit_exit()
+```
+
+### composite null
+
+```{r}
+d <- 0.5
+type1 <- 0.05
+type2 <- 0.2
+upper <- log( (1-type2) / type1)
+lower <- log( type2 / (1 - type1))
+
+seq_ml_test_list <- vector("list", length = length(diff_list))
+
+for (tseries in seq_along(diff_list)) {
+  # get sequential ml estimates for current time series
+  x <- diff_list[[tseries]]
+  seq_mle <- run_stat(x)
+  mu_vec <- seq_mle$mu_mle
+  sd_mle_vec <- seq_mle$sd_mle
+  sd_null_vec <- seq_mle$sd_null
+  
+  # initialize vectors to store LLR and decision
+llr_vec <- vector("numeric", length = length(x))
+decision_vec <- vector("numeric", length = length(x))
+for (samp in 2:length(x)) {
+  # compute log-likelihood ratio for observations 1:samp
+  llr_vec[samp] <- sum(dnorm(x[1:samp], mean = mu_vec[samp], sd = sd_mle_vec[samp], log = TRUE)) -
+                    sum(dnorm(x[1:samp], mean = 0, sd = sd_null_vec[samp], log = TRUE))
+  # stop if llr outside of continuation region
+    decision_vec[samp] <- case_when(llr_vec[samp] <= upper & llr_vec[samp] >= lower ~ "?", # get decision
+                                llr_vec[samp] > upper ~ "H1",
+                                llr_vec[samp] < lower ~ "H0")
+  }
+seq_ml_test_list[[tseries]] <- tibble(x = x, 
+                             true_effect = d_true_vec[tseries],
+                             llr = llr_vec, 
+                             decision = decision_vec,
+                             trend = mu_vec,
+                             sd = sd_mle_vec) 
+}
+
+seq_ml_df <- bind_rows(seq_ml_test_list, .id = "sim") %>% mutate(sim = as.numeric(sim))
+
+```
+
 
 ```{r eval = FALSE}
 arima.sim(list(order = c(1,0,0), ar = 0.5, sd = 0.1), n = 100) %>% plot()
