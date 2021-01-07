@@ -110,7 +110,27 @@ cumSkipNA <- function(x, FUNC)
 
 ### naive sequential test
 
-Here I test simple null ($H_0: r = 0$) and alternative ($H_1: r = 0.1$) hypotheses using the likelihood ratio of sequential maximum likelihood estimates.
+Here I test simple null ($H_0: r = 0$) and alternative ($H_1: r = 0.1$) hypotheses using the likelihood ratio of sequential restricted likelihood estimates:
+
+\begin{align}
+S_0 & = 0 \\
+S_t & = \ln \left( \frac{P(d_{1:t}|r = 0.1, \hat\sigma_{1,t})}{P(d_{1:t}|r = 0, \hat\sigma_{0,t})} \right)
+\end{align}
+
+Where $P(.)$ is the normal probability density function of the observed differences $d_1,\ldots, d_t$ given the hypothesized trend $r$ and the sequential maximum likelihood estimate of the sd under each hypothesis $\hat\sigma_{i,t} \text{  , }i=0,1$.
+
+The decision boundaries are set using Wald's approximations:
+
+$$A = \ln \frac{1-\beta}{\alpha}$$
+$$B = \ln \frac{\beta}{1-\alpha}$$
+
+Where the researcher chooses a type I ($\alpha$) and type II ($\beta$) error probability that is acceptable to their objectives.
+
+After each observation there are three possible outcomes:
+
+* If $S_t \in (A,B)$ then take another observation. 
+* If $S_t > A$ reject $H_0$ 
+* If $S_t < B$ accept $H_0$.
 
 ```{r}
 seq_test <- function(diffs, min_effect = NA, true_effect = NA, type1, type2) {
@@ -168,7 +188,7 @@ set.seed(123)
 
 # set params
 nreplicates <- 100
-effect_size <- seq(0.25, by = 0.5, length.out = 5)
+effect_size <- seq(0, by = 0.5, length.out = 6)
 d_true_vec <- rep(effect_size, each = nreplicates)
 d_relevant <- 0.5
 d_relevant_vec <- rep(d_relevant, length = length(d_true_vec))
@@ -204,9 +224,9 @@ seq_result_df %>%
 
 Note that the average sample number (asn) increases as the difference between the alternative hypothesis and true effect size increases. This is because both the null and alternative are unlikely given the observed data.
 
-The empirical error probabilities exceed the nominal error probabilities when $H_0$ is false ($r = 0.25$) the empirical type I error is $0.28$. However, the bounds on type I and II error probability are satisfied for all other parameter values.
+The empirical type I error probabilities exceed the nominal type I error probability when $H_0$ is false. However, the bounds on type I and II error probability are satisfied for all other parameter values.
 
-Oddly, the estimates of the trend do not appear to be biased like I expected.
+Oddly, the estimates of the trend do not appear to be biased like I expected. (NOTE: Maximum likelihood estimates may be unaffected by stopping rules. Need to check.)
 
 ```{r}
 seq_test_df <- seq_test_list %>% bind_rows(.id = "sim")
@@ -244,7 +264,7 @@ seq_result_df %>%
 ```{r}
 # fixed sample size effect size for one sided t-test
 # assume sd is known
-tibble(effect_size = effect_size) %>%
+tibble(effect_size = effect_size[effect_size > 0]) %>%
   rowwise() %>%
   mutate(sample_size =  power.t.test(delta = effect_size, sd = 1, sig.level = 0.05, power = 0.8, 
                                      type = "one.sample", alternative = "one.sided")$n,
@@ -254,7 +274,7 @@ tibble(effect_size = effect_size) %>%
   knitr::kable()
 ```
 
-Sample size calculations for the fixed sample test assume that the unknown parameters $r,\sigma$ are known. For these sample size calculations I set a 0.05 type I error rate, 0.8 power which is the same as the nominal error probabilities for the sequential test.
+Sample size calculations for the fixed sample test assume that the unknown parameters $r,\sigma$ are known. For these sample size calculations I set a 0.05 type I error rate, 0.8 power which is the same as the nominal error probabilities I used for the sequential test.
 
 ### Effect of optional stopping on error rates for fixed-sample t-test
 
@@ -291,7 +311,7 @@ rep_t_df <- tibble(true_effect = d_true_vec
 rep_t_df %>%
   ggplot() +
   geom_point(aes(x = sample_size, y = trend - true_effect, col = decision)) +
-  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
   facet_wrap(~true_effect) +
   labs(title = "T-test with optional stopping",
        caption = "t-test applied after every observation, stopped when p < 0.05")
@@ -310,17 +330,16 @@ rep_t_df %>%
 
 As expected, optional stopping results in rejection of the null. Note that the time series for which the null was not rejected would have eventually lead to rejection. Optional stopping also results in effect size estimates that are biased.
 
-```{r eval = FALSE}
-seq_result_df
-
-seq_test(diff_list[[1]], min_effect = d_relevant, true_effect = d_true, type1 = 0.05, type2 = 0.2) %>% get_decision()
-
-sprt.t.test(x = diff_list[[400]][1:7], d = 0.5, alpha = 0.05, power = 0.8, alternative = "greater")
-
-t.test(x = diff_list[[400]][1:7], d = 0.5, alpha = 0.05, alternative = "greater")
-```
-
 # Sequential t-test
+
+\begin{align}
+S_1 & = 0 \\
+S_t & = \ln \left( \frac{P(t_{1:t}|df = t-1, \delta)}{P(t_{1:t}|df = t-1)} \right)
+\end{align}
+
+Where $P(.)$ is the probability density function of t-distribution for the t-statistic $\hat r /\hat\sigma$ given the $df = t - 1$ and hypothesized effect size $\delta = r/\sigma$. In this case, $\delta = 0.5$ which is consistent with the minimum relevant trend size used for the naive sequential test shown previously.
+
+I used the Wald approximation for the decision boundaries.
 
 ```{r warning = FALSE}
 # x <- diff_list[[1]]
@@ -385,8 +404,9 @@ seq_t_result %>%
             asn = ceiling(mean(time)),
             trend = mean(trend)) %>%
   knitr::kable(digits = 2)
-  
 ```
+
+The nominal error probabilities are met except for the case where the $r = \delta$ which accepts $H0$ at too high a probability.
 
 ```{r}
 seq_t_result %>%
@@ -397,6 +417,26 @@ seq_t_result %>%
   labs(title = "Uncorrected trend estimates for sequential t-test")
 ```
 
+There are clear problems with the estimates obtained after stopping using the sequential t-test. All estimates are biased in the direction of the hypothesis that is accepted.
+
+# Conclusion
+
+I will probably focus more on ad-hoc sequential maximum likelihood ratio tests over the sequential t-test. While the Wald decision boundary apporximations don't necessarily work for an these ad-hoc procedures it will be possible to obtain boundaries through simulation that yield error probabilities set by the researcher.
+
+### Next steps before spring semester:
+
+* sequential maximum likelihood ratio test (composite alternative)
+    + simple null ($H_0: r = 0$)
+    + composite null ($H_0: r \in (-r_0,r_0)$)
+  
+* Methods for computing bounds for tests
+
+* Extension to gaussian AR(1) 
+
+### Other
+
+* Check if the resampling method for power analyses commonly used by ecologists actually makes sense
+* Reformulate as Bayesian sequential decision problems
 
 ```{r eval = FALSE}
 arima.sim(list(order = c(1,0,0), ar = 0.5, sd = 0.1), n = 100) %>% plot()
