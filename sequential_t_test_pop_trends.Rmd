@@ -205,6 +205,8 @@ Note that the average sample number (asn) increases as the difference between th
 
 The empirical error probabilities exceed the nominal error probabilities when $H_0$ is false ($r = 0.25$) the empirical type I error is $0.28$. However, the bounds on type I and II error probability are satisfied for all other parameter values.
 
+Oddly, the estimates of the trend do not appear to be biased like I expected.
+
 ```{r}
 seq_test_df <- seq_test_list %>% bind_rows(.id = "sim")
 
@@ -253,6 +255,60 @@ tibble(effect_size = effect_size) %>%
 
 Sample size calculations for the fixed sample test assume that the unknown parameters $r,\sigma$ are known. For these sample size calculations I set a 0.05 type I error rate, 0.8 power which is the same as the nominal error probabilities for the sequential test.
 
+### Effect of optional stopping on error rates for fixed-sample t-test
+
+```{r}
+# initialize list to store results
+ttest_list <- vector("list", length = length(diff_list))
+
+# for each time series, apply the one sided t-test after every observation
+# stop and make decision at first time p < 0.05
+# return a list containing t.test object
+for (tseries in seq_along(diff_list)) {
+  
+  for (samp in 2:tmax) {
+    # calc t test repeatedly as data "accumulates"
+    ttest_list[[tseries]] <- t.test(diff_list[[tseries]][1:samp], alternative = "greater", conf.level = 0.95)
+    
+    # stop if p-value < 0.05
+    if (ttest_list[[tseries]]$p.value < 0.05) break
+  }
+}
+
+# make a df from the list of t.test objects
+unlisted <- unlist(ttest_list)
+rep_t_df <- tibble(true_effect = d_true_vec
+      ,p = unlisted[names(unlisted) == "p.value"] %>% as.numeric()
+      , sample_size = unlisted[names(unlisted) == "parameter.df"] %>% as.numeric() + 1
+      , trend = unlisted[names(unlisted) == "estimate.mean of x"] %>% as.numeric() 
+      , stderr = unlisted[names(unlisted) == "stderr"] %>% as.numeric() ) %>%
+  mutate(decision = ifelse(p < 0.05, "H1", "H0"))
+
+```
+
+```{r plot_opt_stopping}
+rep_t_df %>%
+  ggplot() +
+  geom_point(aes(x = sample_size, y = trend - true_effect, col = decision)) +
+  geom_hline(yintercept = 0) +
+  facet_wrap(~true_effect) +
+  labs(title = "T-test with optional stopping",
+       caption = "t-test applied after every observation, stopped when p < 0.05")
+```
+
+
+```{r table_opt_stopping}
+rep_t_df %>%
+  group_by(true_effect) %>%
+  summarise(accept = sum(decision == "H0")/n(),
+            reject = sum(decision == "H1")/n(),
+            asn = ceiling(mean(sample_size)),
+            estimate = mean(trend)) %>%
+  knitr::kable(digits = 2)
+```
+
+As expected, optional stopping results in rejection of the null. Note that the time series for which the null was not rejected would have eventually lead to rejection. Optional stopping also results in effect size estimates that are biased.
+
 ```{r eval = FALSE}
 seq_result_df
 
@@ -262,4 +318,10 @@ sprt.t.test(x = diff_list[[400]][1:7], d = 0.5, alpha = 0.05, power = 0.8, alter
 
 t.test(x = diff_list[[400]][1:7], d = 0.5, alpha = 0.05, alternative = "greater")
 ```
+
+```{r eval = FALSE}
+arima.sim(list(order = c(1,0,0), ar = 0.5, sd = 0.1), n = 100) %>% plot()
+arima.sim(list(sd = 0.1), n = 100) %>% plot()
+```
+
 
