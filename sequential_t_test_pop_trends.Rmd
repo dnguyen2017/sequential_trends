@@ -39,7 +39,54 @@ x_1 - x_0, \ldots, x_T - x_{T-1} \text{ for exponential model} \\
                      & \overset{iid}\sim Normal(r, \sigma) \\
 \end{align}
 
-Since the first difference are independent and identically distributed normal with mean equal to the (additive) linear or exponential (multiplicative) trend we can test for non-zero trends using the null hypothesis of $r = 0$ and alternative hypothesis $r \neq 0$.
+Since the first differences are independent and identically distributed normal random variables with mean equal to the linear (additive) or exponential (multiplicative) trend we can test for non-zero trends using the null hypothesis of $r = 0$ and alternative hypothesis $r \neq 0$.
+
+# Magnitude of conservation relevant trends
+
+Estimated trends in population reduction are included as in the IUCN Red list as one of five criteria for classifying threatened taxa (criterion A). The IUCN has defined intervals of percent population decline for categorization of threatened taxa as criticaly endangered, endangered, and vulnerable. The lower bound of these intervals can be used to make decisions about how to subset the parameter space of trend ($r$) for testing hypotheses about whether a population is declining, and if so, what threat category to assign based on criteria A. 
+
+```{r}
+# https://nc.iucnredlist.org/redlist/content/attachment_files/summary_sheet_en_web.pdf
+iucn_crit <- expand_grid(subcriteria = c("A1", "A2, A3, A4"),
+                         category = c("Critically endangered", "endangered", "vulnerable")) %>%
+  add_column(threshold = c(0.9, 0.7, 0.5, 0.8, 0.5, 0.3))
+
+
+timespan = 9 # for decadal trend assuming initial population size at t = 0
+# compute trend parameter to satisfy IUCN threshold
+iucn_crit <- 
+  iucn_crit %>%
+  mutate(trend = log(1-threshold)/timespan
+         ,linear_trend = -(1 - threshold) / timespan)
+
+iucn_crit %>% 
+  mutate(threshold = paste(threshold*100, "%")) %>%
+  arrange(category) %>%
+  knitr::kable(digits = 3, caption = "IUCN Red List criteria A",
+               col.names = c("sub-criteria", "threat category", "10-year % decrease", "exp. trend (r)", "lin. trend (r)" ))
+```
+
+# Example of defining null and alternative hypothesis using IUCN criteria A
+
+In a null hypothesis testing framework, deciding if a population was critically endangered there are multiple hypotheses that could be tested. For instance:
+
+* Stochastic exponential decline and subcriteria A1: $H_0: r = 0$ and $H_1: r < -0.256$
+* Stochastic exponential decline and subcriteria A2 or A4: $H_0: r = 0$ and $H_1: r < -0.179$
+
+
+```{r}
+iucn_crit %>%
+  rowwise() %>%
+  mutate(traj = list(exp(trend*0:9))) %>%
+  unnest(traj) %>%
+  group_by(category, subcriteria) %>%
+  mutate(time = row_number()) %>%
+  ggplot() +
+  geom_line(aes(x = time, y = traj, col = category)) +
+  facet_wrap(~subcriteria) +
+  ylim(-0.1,1.1)
+```
+
 
 ```{r}
 run_stat <- function(x,
@@ -501,6 +548,8 @@ I will probably focus more on ad-hoc sequential maximum likelihood ratio tests o
     + composite null ($H_0: r \in (-r_0,r_0)$)
   
 * Methods for computing bounds for tests
+
+* Confidence intervals based on Fisher information (i.e., not dependent on sampling distribution)
 
 * Extension to gaussian AR(1) 
 
