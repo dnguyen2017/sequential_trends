@@ -580,7 +580,7 @@ for (tseries in seq_along(diff_list)) {
   # init storage
   alt_mean <- null_mean <- alt_sd <- null_sd <- alt_conv <- null_conv <- rep(NA_real_, length = length(x))
   llr_vec <- rep(NA_real_, length = length(x))
-  decision_vec <- vector("numeric", length = length(x))
+  decision_vec <- rep(NA_character_, length = length(x))
   
   for (samp in 2:length(x)) {
     
@@ -657,6 +657,45 @@ seq_comp_result %>%
   geom_point(aes(x = time, y = trend - true_effect, col = decision)) +
   facet_wrap(~true_effect) +
   labs(title = "Trend estimates for sequential maximum LRT")
+```
+
+```{r}
+# examine runs where no decision was made
+# how many times did llr switch signs?
+# get position and number of switches for each run
+undecided <-
+  seq_comp_test %>%
+  group_by(sim) %>%
+  mutate(time = row_number()) %>%
+  mutate(made_decision = sum((decision == "H0" | decision == "H1"), na.rm = TRUE) > 0) %>% #pull(made_decision) %>% unique()
+  filter(made_decision == FALSE) %>%
+  mutate(evidence = ifelse(llr > 0, "H1", "H0")) %>%
+  mutate(switched = ifelse(evidence != lag(evidence), 1, NA_real_),
+         #switched = ifelse(is.na(switched), 0, switched),
+         n_switch = sum(switched, na.rm = TRUE))
+undecided %>%
+  filter(true_effect == 0) %>%
+  ggplot() +
+  geom_line(aes(x = time, y = llr)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point(data = filter(undecided, !is.na(switched), true_effect == 0), aes(x = time, y = llr), col = "red") +
+  geom_rug(data = filter(undecided, !is.na(switched), true_effect == 0), 
+           aes(x = time, y = switched), col = "red", sides = "b") +
+  facet_wrap(~sim) +
+  labs(title = "LLR when test never terminated (r = 0)",
+       caption = "Points indicate switch between evidence for each hypothesis")
+
+undecided %>%
+  filter(true_effect == 0.5) %>%
+  ggplot() +
+  geom_line(aes(x = time, y = llr)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point(data = filter(undecided, !is.na(switched), true_effect == 0.5), aes(x = time, y = llr), col = "red") +
+  geom_rug(data = filter(undecided, !is.na(switched), true_effect == 0.5), 
+           aes(x = time, y = switched), col = "red", sides = "b") +
+  facet_wrap(~sim) +
+  labs(title = "LLR when test never terminated (r = 0.5)",
+       caption = "Points indicate switch between evidence for each hypothesis")
 ```
 
 
