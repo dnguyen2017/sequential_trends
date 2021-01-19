@@ -185,9 +185,10 @@ Sample size calculations for the fixed sample test assume that the unknown param
 ### Effect of optional stopping on error rates for fixed-sample t-test
 
 ```{r cache = TRUE}
+set.seed(123)
 # initialize list to store results
-ntsim <- 1000
-sim_dat_ttest <- lapply(1:1000, function(x) rnorm(n = tmax, mean = 0, sd = 1))
+ntsim <- 5000
+sim_dat_ttest <- lapply(1:ntsim, function(x) rnorm(n = tmax, mean = 0, sd = 1))
 
 ttest_list <- vector("list", length = length(sim_dat_ttest))
 
@@ -221,32 +222,13 @@ rep_t_df <- tibble(true_effect = 0
 ```
 
 ```{r plot_opt_stopping}
-# rep_t_df %>%
-#   ggplot() +
-#   geom_point(aes(x = sample_size, y = trend - true_effect, col = decision)) +
-#   geom_hline(yintercept = 0, linetype = "dashed") +
-#   facet_wrap(~true_effect) +
-#   labs(title = "T-test with optional stopping",
-#        caption = "t-test applied after every observation, stopped when p < 0.05")
-
-# repeated_t <- 
-#   rep_t_df %>%
-#   summarize(sample_size = unique(sample_size), 
-#                             ecdf = ecdf(sample_size)(unique(sample_size)) * length(sample_size))
-# rep_t_freq <- 
-#   rep_t_df %>%
-#   group_by(sample_size) %>%
-#   summarise(num = n()) %>%
-#   # rowwise() %>%
-#   mutate(freq = cumsum(num)/ntsim)
-# 
-# repeated_t  <-
-#   inner_join(rep_t_df, rep_t_freq, by = "sample_size")
-
-
 rep_t_df %>%
   ggplot(aes(x = sample_size, y = cum_H1)) + geom_step() +
   geom_hline(yintercept = 0.05, col = "red", linetype = "dashed") +
+  geom_point(filter(rep_t_df, sample_size %in% c(2, 10, 20, 50, 100)), 
+             mapping = aes(x = sample_size, y = cum_H1)) +
+  geom_text(filter(rep_t_df, sample_size %in% c(2, 10, 20, 50, 100)), 
+             mapping = aes(x = sample_size, y = cum_H1, label = round(cum_H1, digits = 2)), nudge_y = 0.05) +
   ylim(0,1) +
   labs(title = "Inflation of type I error by repeated tests of accumulating data",
        y = "Probability of type I error",
@@ -254,22 +236,15 @@ rep_t_df %>%
        caption = "Data simulated from N(0,1) \nOne-sided t-test applied after every observation") 
 ```
 
-```{r}
-rep_t_df %>%
-  group_by(sample_size) %>%
-  summarise(prop = sum(decision == "H1") / ntsim) %>%
-  mutate(cum_H1 = cumsum(prop))
-```
-
 
 ```{r table_opt_stopping, warning = FALSE}
 rep_t_df %>%
-  group_by(true_effect) %>%
-  summarise(accept = sum(decision == "H0")/n(),
-            reject = sum(decision == "H1")/n(),
-            asn = ceiling(mean(sample_size)),
-            estimate = mean(trend)) %>%
+  filter(sample_size %in% c(2, 5, 10, 15, 19, 49, 100)) %>%
+  summarise("Observation" = sample_size, 
+            "Pr(Type I error)" = cum_H1) %>%
   knitr::kable(digits = 2)
+
+rep_t_df$sample_size %>% unique()
 ```
 
 As expected, optional stopping results in rejection of the null. Note that the time series for which the null was not rejected would have eventually lead to rejection. Optional stopping also results in effect size estimates that are biased.
