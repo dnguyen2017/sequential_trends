@@ -165,7 +165,7 @@ tmax <- 100
 # simulate differences
 diff_list <- lapply(seq_along(d_true_vec), function(x) rnorm(n = tmax, mean = d_true_vec[x], sd = 1))
 ```
-
+                    
 ### sample size for fixed-sample one-sided t test
 ```{r}
 # fixed sample size effect size for one sided t-test
@@ -187,8 +187,9 @@ Sample size calculations for the fixed sample test assume that the unknown param
 ```{r cache = TRUE}
 set.seed(123)
 # initialize list to store results
-ntsim <- 5000
-sim_dat_ttest <- lapply(1:ntsim, function(x) rnorm(n = tmax, mean = 0, sd = 1))
+ntsim <- 2000
+small_effects <- rep(c(0,0.05,0.1), each = ntsim)
+sim_dat_ttest <- lapply(seq_along(small_effects), function(x) rnorm(n = tmax, mean = small_effects[x], sd = 1))
 
 ttest_list <- vector("list", length = length(sim_dat_ttest))
 
@@ -208,43 +209,93 @@ for (tseries in seq_along(sim_dat_ttest)) {
 
 # make a df from the list of t.test objects
 unlisted <- unlist(ttest_list)
-rep_t_df <- tibble(true_effect = 0
+rep_t_df <- tibble(true_effect = small_effects
       ,p = unlisted[names(unlisted) == "p.value"] %>% as.numeric()
       , sample_size = unlisted[names(unlisted) == "parameter.df"] %>% as.numeric() + 1
       , trend = unlisted[names(unlisted) == "estimate.mean of x"] %>% as.numeric() 
-      , stderr = unlisted[names(unlisted) == "stderr"] %>% as.numeric() ) %>%
-  mutate(decision = ifelse(p < 0.05, "H1", "H0")) %>%
+      , stderr = unlisted[names(unlisted) == "stderr"] %>% as.numeric()) %>%
+  mutate(decision = ifelse(p < 0.05, "H1", "H0"))
+
+rep_t_H1 <- rep_t_df %>% 
+            # mutate(sample_size = ifelse(decision == "H0", NA, sample_size))
+            filter(decision == "H1")
+
+rep_t_summary <- 
+  rep_t_H1 %>%
   # get cumulative proportion of type I error at each sample size
-  group_by(sample_size) %>%
-  summarise(prop = sum(decision == "H1") / ntsim) %>%
+  # group_by(sample_size) %>%
+  group_by(true_effect, sample_size) %>%
+  summarise(prop = sum(decision == "H1") / ntsim,
+            mean_effect = mean(trend)) %>%
+  group_by(true_effect) %>%
   mutate(cum_H1 = cumsum(prop))
 
 ```
 
 ```{r plot_opt_stopping}
-rep_t_df %>%
+# rep_t_summary %>%
+#   ggplot(aes(x = sample_size, y = cum_H1)) + geom_step() +
+#   geom_hline(yintercept = 0.05, col = "red", linetype = "dashed") +
+#   geom_point(filter(rep_t_summary, sample_size %in% c(2, 10, 20, 50, 100)), 
+#              mapping = aes(x = sample_size, y = cum_H1)) +
+#   geom_text(filter(rep_t_summary, sample_size %in% c(2, 10, 20, 50, 100)), 
+#              mapping = aes(x = sample_size, y = cum_H1, label = round(cum_H1, digits = 2)), nudge_y = 0.05) +
+#   ylim(0,1) +
+#   labs(title = "Inflation of type I error by repeated tests of accumulating data",
+#        y = "Probability of type I error",
+#        x = "sample number",
+#        caption = "Data simulated from N(0,1) \nOne-sided t-test applied after every observation") +
+#   facet_wrap(~true_effect, nrow = 3)
+
+rep_t_summary %>%
+  mutate(true_effect = paste("true effect = ", true_effect)) %>%
   ggplot(aes(x = sample_size, y = cum_H1)) + geom_step() +
   geom_hline(yintercept = 0.05, col = "red", linetype = "dashed") +
-  geom_point(filter(rep_t_df, sample_size %in% c(2, 10, 20, 50, 100)), 
-             mapping = aes(x = sample_size, y = cum_H1)) +
-  geom_text(filter(rep_t_df, sample_size %in% c(2, 10, 20, 50, 100)), 
-             mapping = aes(x = sample_size, y = cum_H1, label = round(cum_H1, digits = 2)), nudge_y = 0.05) +
   ylim(0,1) +
-  labs(title = "Inflation of type I error by repeated tests of accumulating data",
-       y = "Probability of type I error",
-       x = "sample number",
-       caption = "Data simulated from N(0,1) \nOne-sided t-test applied after every observation") 
+  facet_wrap(~true_effect, nrow = 3) +
+  theme(legend.position = "n")
+```
+
+```{r}
+rep_t_summary %>%
+  #mutate(true_effect = paste("true effect = ", true_effect)) %>%
+  ggplot(aes(x = sample_size, y = cum_H1, col = as.factor(true_effect) )) + geom_step() +
+  geom_hline(yintercept = 0.05, col = "red", linetype = "dashed") +
+  ylim(0,0.5) + xlim(0,25) +
+  labs(title = "Optional stopping increases false alarms",
+       y = "Cumulative probability of false alarm",
+       x = "sample (year)",
+       col = "true effect")
+  
 ```
 
 
-```{r table_opt_stopping, warning = FALSE}
+```{r}
+# ggplot() +
+#   geom_jitter(data = rep_t_H1, mapping = aes(x = sample_size, y = trend), alpha = 0.1) +
+#   geom_line(data = rep_t_summary, mapping = aes(x = sample_size, y = mean_effect), size = 1.5) +
+#   geom_hline(yintercept = 0, linetype = "dashed", col = "red") +
+#   ylim(-0.1, 1.1) +
+#   labs(title = "Bias of effect size estimates given optional stopping",
+#        x = "sample number",
+#        y = "Effect size estimate")
+
+rep_t_summary %>%
+  mutate(true_effect_facet = paste("true effect = ", true_effect)) %>%
+  ggplot() +
+  geom_jitter(data = rep_t_H1, mapping = aes(x = sample_size, y = trend), alpha = 0.01) +
+  geom_line(aes(x = sample_size, y = mean_effect), size = 1.5) +
+  geom_line(aes(x = sample_size, y = true_effect), linetype = "dashed") +
+  facet_wrap(~true_effect_facet, nrow = 3)
+```
+
+
+```{r table_opt_stopping, warning = FALSE, eval = FALSE}
 rep_t_df %>%
   filter(sample_size %in% c(2, 5, 10, 15, 19, 49, 100)) %>%
   summarise("Observation" = sample_size, 
             "Pr(Type I error)" = cum_H1) %>%
   knitr::kable(digits = 2)
-
-rep_t_df$sample_size %>% unique()
 ```
 
 As expected, optional stopping results in rejection of the null. Note that the time series for which the null was not rejected would have eventually lead to rejection. Optional stopping also results in effect size estimates that are biased.
@@ -465,7 +516,7 @@ seq_comp_result %>%
   labs(title = "Trend estimates for sequential maximum LRT")
 ```
 
-```{r}
+```{r eval = FALSE}
 # examine runs where no decision was made
 # how many times did llr switch signs?
 # get position and number of switches for each run
@@ -504,6 +555,11 @@ undecided %>%
        caption = "Points indicate switch between evidence for each hypothesis")
 ```
 
+```{r}
+
+```
+
+
 
 # Conclusion
 
@@ -525,6 +581,140 @@ I will probably focus more on ad-hoc sequential maximum likelihood ratio tests o
 
 * Check if the resampling method for power analyses commonly used by ecologists actually makes sense
 * Reformulate as Bayesian sequential decision problems
+
+# Ecologically relevant trends
+
+```{r setup_eco_trend}
+# simulate data for ecologically relevant parameter regions
+set.seed(123)
+
+# set params
+nreplicates <- 1000
+effect_size <- round(iucn_crit$trend/2, 4) %>% unique() %>% append(0)
+effect_sd <- 0.1
+
+d_true_vec <- rep(effect_size, each = nreplicates)
+d_relevant <- -0.0346 # dixon pechmann, doubling/half time of 20 years
+d_relevant_vec <- rep(d_relevant, length = length(d_true_vec))
+tmax <- 100
+
+# error probabilities and bounds
+type1 <- 0.05
+type2 <- 0.2
+upper <- log( (1-type2) / type1)
+lower <- log( type2 / (1 - type1))
+
+# define accept-reject regions
+null_hyp <- c(d_relevant*0.99, 10)
+alt_hyp <- c(-10, d_relevant)
+
+# simulate differences
+diff_list_trend <- lapply(seq_along(d_true_vec), function(x) rnorm(n = tmax, mean = d_true_vec[x], sd = effect_sd))
+```
+
+```{r dependson="setup_eco_trend"}
+seq_trend_test_list <- vector("list", length = length(diff_list_trend))
+
+for (tseries in seq_along(diff_list_trend)) {
+  x <- diff_list_trend[[tseries]]
+  
+  # init storage
+  alt_mean <- null_mean <- alt_sd <- null_sd <- alt_conv <- null_conv <- rep(NA_real_, length = length(x))
+  llr_vec <- rep(NA_real_, length = length(x))
+  decision_vec <- rep(NA_character_, length = length(x))
+  
+  for (samp in 2:length(x)) {
+    
+    # get MLE under each hypothesis
+    alt <- likelihood_fn(x[1:samp],
+                  hypothesis = alt_hyp,
+                  guess = c(0,1))
+    null <- likelihood_fn(x[1:samp],
+                  hypothesis = null_hyp,
+                  guess = c(0,1))
+    
+    # compute loglikehood ratio
+    llr_vec[samp] <- alt$loglikelihood - null$loglikelihood
+    
+    # save parameter estimates and convergence code (0 = converged) under each hypohtesis
+    alt_mean[samp] <- alt$mean
+    alt_sd[samp] <- alt$sd
+    alt_conv[samp] <- alt$convergence
+    
+    null_mean[samp] <- null$mean
+    null_sd[samp] <- null$sd
+    null_conv[samp] <- null$convergence
+    
+    
+    # make decision if llr outside of continuation region
+    # break loop if decision is made
+    decision_vec[samp] <- case_when(llr_vec[samp] <= upper & llr_vec[samp] >= lower ~ "?", # get decision
+                                llr_vec[samp] > upper ~ "H1",
+                                llr_vec[samp] < lower ~ "H0")
+    if (decision_vec[samp] != "?") break
+  }
+
+seq_trend_test_list[[tseries]] <- tibble(x = x, 
+                             true_effect = d_true_vec[tseries],
+                             llr = llr_vec, 
+                             decision = decision_vec,
+                             trend_alt = alt_mean,
+                             sd_alt = alt_sd,
+                             conv_alt = alt_conv,
+                             trend_null = null_mean,
+                             sd_null = null_sd,
+                             conv_null = null_conv) 
+}
+
+seq_comp_trend_test <- bind_rows(seq_trend_test_list, .id = "sim") %>% mutate(sim = as.numeric(sim))
+```
+
+```{r}
+seq_comp_trend_result <-
+  seq_comp_trend_test %>%
+  group_by(sim) %>%
+  mutate(time = row_number()) %>%
+  filter(decision == "H0" | decision == "H1") %>%
+  slice(1)
+
+seq_comp_trend_result %>%
+  group_by(true_effect) %>%
+  mutate(nreplicates = n()) %>%
+  summarise(accept = sum(decision == "H0")/nreplicates,
+            reject = sum(decision == "H1")/nreplicates,
+            no_decision = 1 - accept - reject,
+            asn = ceiling(mean(time)),
+            trend_alt = mean(trend_alt),
+            trend_null = mean(trend_null)) %>%
+  slice(1) %>%
+  arrange(desc(true_effect)) %>%
+  knitr::kable(digits = 3)
+```
+
+
+The relevant effect size is `r d_relevant`
+
+There are some convergence issues with finding the MLE.
+
+```{r}
+seq_comp_trend_result %>%
+  filter(conv_alt != 0, conv_null != 0) %>%
+  group_by(true_effect, decision, conv_alt, conv_null) %>%
+  summarise(occurances = n()) %>%
+  knitr::kable()
+```
+
+
+```{r}
+seq_comp_trend_result %>%
+  mutate(trend = case_when(decision == "H0" ~ trend_null,
+                           decision == "H1" ~ trend_alt)) %>%
+  ggplot() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point(aes(x = time, y = trend - true_effect, col = decision)) +
+  facet_wrap(~round(true_effect,3) ) +
+  labs(title = "Trend estimates for sequential maximum LRT")
+```
 
 ```{r}
 knitr::knit_exit()
