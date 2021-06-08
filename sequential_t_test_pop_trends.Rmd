@@ -10,7 +10,7 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
-
+theme_set(theme_bw(base_size = 18))
 # apply FUNC cumulatively when NA are present
 # https://stackoverflow.com/questions/25576358/calculate-cumsum-while-ignoring-na-values/25576972
 cumSkipNA <- function(x, FUNC)
@@ -232,6 +232,11 @@ rep_t_summary <-
 
 ```
 
+```{r eval = FALSE}
+saveRDS(rep_t_df, file = "simulation/optional_stopping_example.RData")
+```
+
+
 ```{r plot_opt_stopping}
 # rep_t_summary %>%
 #   ggplot(aes(x = sample_size, y = cum_H1)) + geom_step() +
@@ -246,7 +251,6 @@ rep_t_summary <-
 #        x = "sample number",
 #        caption = "Data simulated from N(0,1) \nOne-sided t-test applied after every observation") +
 #   facet_wrap(~true_effect, nrow = 3)
-
 rep_t_summary %>%
   mutate(true_effect = paste("true effect = ", true_effect)) %>%
   ggplot(aes(x = sample_size, y = cum_H1)) + geom_step() +
@@ -262,7 +266,7 @@ rep_t_summary %>%
   ggplot(aes(x = sample_size, y = cum_H1, col = as.factor(true_effect) )) + geom_step() +
   geom_hline(yintercept = 0.05, col = "red", linetype = "dashed") +
   ylim(0,0.5) + xlim(0,25) +
-  labs(title = "Optional stopping increases false alarms",
+  labs(#title = "Optional stopping increases false alarms",
        y = "Cumulative probability of false alarm",
        x = "sample (year)",
        col = "true effect")
@@ -285,8 +289,10 @@ rep_t_summary %>%
   ggplot() +
   geom_jitter(data = rep_t_H1, mapping = aes(x = sample_size, y = trend), alpha = 0.01) +
   geom_line(aes(x = sample_size, y = mean_effect), size = 1.5) +
-  geom_line(aes(x = sample_size, y = true_effect), linetype = "dashed") +
-  facet_wrap(~true_effect_facet, nrow = 3)
+  geom_line(aes(x = sample_size, y = true_effect), linetype = "dashed", col = "red") +
+  facet_wrap(~true_effect_facet, nrow = 3) +
+  labs(x = "Stopping time (years)",
+       y = "Estimated trend at stopping time")
 ```
 
 
@@ -589,7 +595,7 @@ I will probably focus more on ad-hoc sequential maximum likelihood ratio tests o
 set.seed(123)
 
 # set params
-nreplicates <- 1000
+nreplicates <- 10000
 effect_size <- round(iucn_crit$trend/2, 4) %>% unique() %>% append(0)
 effect_sd <- 0.1
 
@@ -612,7 +618,7 @@ alt_hyp <- c(-10, d_relevant)
 diff_list_trend <- lapply(seq_along(d_true_vec), function(x) rnorm(n = tmax, mean = d_true_vec[x], sd = effect_sd))
 ```
 
-```{r dependson="setup_eco_trend"}
+```{r dependson="setup_eco_trend", eval = FALSE}
 seq_trend_test_list <- vector("list", length = length(diff_list_trend))
 
 for (tseries in seq_along(diff_list_trend)) {
@@ -667,9 +673,11 @@ seq_trend_test_list[[tseries]] <- tibble(x = x,
 }
 
 seq_comp_trend_test <- bind_rows(seq_trend_test_list, .id = "sim") %>% mutate(sim = as.numeric(sim))
+saveRDS(seq_comp_trend_test, file = "simulation/seq_comp_trend_test.RData")
 ```
 
 ```{r}
+seq_comp_trend_test <- readRDS("simulation/seq_comp_trend_test.RData")
 seq_comp_trend_result <-
   seq_comp_trend_test %>%
   group_by(sim) %>%
@@ -690,6 +698,7 @@ seq_comp_trend_result %>%
   arrange(desc(true_effect)) %>%
   knitr::kable(digits = 3)
 ```
+
 
 
 The relevant effect size is `r d_relevant`
@@ -715,6 +724,53 @@ seq_comp_trend_result %>%
   facet_wrap(~round(true_effect,3) ) +
   labs(title = "Trend estimates for sequential maximum LRT")
 ```
+
+```{r}
+# power of fixed sample t-test for detecting minimum relevant effect
+power.ttest.relevant <- power.t.test(delta = 0.0346, sd = 0.1, sig.level = 0.05, power = 0.8, 
+                                     type = "one.sample", alternative = "one.sided")
+power.ttest.relevant
+n.ttest.relevant <-  ceiling(power.ttest.relevant$n)
+
+# power for fixed sample t-test when the trend and sd are known
+tibble(effect_size = effect_size[effect_size < 0]) %>%
+  arrange(desc(effect_size)) %>%
+  rowwise() %>%
+  mutate(sample_size =  power.t.test(delta = -effect_size, sd = effect_sd, sig.level = 0.05, power = 0.8, 
+                                     type = "one.sample", alternative = "one.sided")$n,
+         sample_size = ceiling(sample_size)) %>%
+  # rowwise() %>%
+  # mutate(sample_size = power_t$n)
+  knitr::kable(digits = 3)
+
+tibble(threshold = iucn_crit$threshold %>% unique(), 
+       trend = round(iucn_crit$trend, 4) %>% unique(),
+       effect_size = -trend) %>%
+        arrange(desc(effect_size)) %>%
+  rowwise() %>%
+  mutate(sample_size =  power.t.test(delta = effect_size, sd = effect_sd, sig.level = 0.05, power = 0.8, 
+                                     type = "one.sample", alternative = "one.sided")$n,
+         sample_size = ceiling(sample_size)) %>%
+  knitr::kable(digits = 3)
+```
+
+```{r}
+seq_comp_trend_result %>%
+  group_by(true_effect) %>%
+  mutate(nreplicates = n()) %>%
+  summarise(accept = sum(decision == "H0")/nreplicates,
+            reject = sum(decision == "H1")/nreplicates,
+            no_decision = 1 - accept - reject,
+            asn = ceiling(mean(time)),
+            trend_alt = mean(trend_alt),
+            trend_null = mean(trend_null)) %>%
+  slice(1) %>%
+  ggplot() +
+  geom_line(aes(x = true_effect, y = asn)) +
+  geom_hline(yintercept = n.ttest.relevant) +
+  theme_bw()
+```
+
 
 ```{r}
 knitr::knit_exit()
