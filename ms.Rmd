@@ -1,0 +1,477 @@
+---
+title: "ms"
+author: "David Nguyen"
+date: "May 14, 2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+options(knitr.kable.NA = '-')
+library(tidyverse)
+library(patchwork)
+theme_set(theme_bw())
+```
+
+```{r load_manipulate_data, cache = TRUE}
+# load optional stopping data
+# repeated application of t test for one-sided hypothesis 
+optional_stopping_df <- readRDS("simulation/optional_stopping_example.RData")
+# subset where null was rejected
+optional_stopping_H1 <- optional_stopping_df %>% 
+            filter(decision == "H1")
+# get operating characteristics of optional stopping example
+ntsim <- nrow(optional_stopping_df) / length(unique(optional_stopping_df$true_effect))
+optional_stopping_summary <- 
+  optional_stopping_H1 %>%
+  # get cumulative proportion of type I error at each sample size
+  # group_by(sample_size) %>%
+  group_by(true_effect, sample_size) %>%
+  summarise(prop = sum(decision == "H1") / ntsim,
+            mean_effect = mean(trend)) %>%
+  group_by(true_effect) %>%
+  mutate(cum_H1 = cumsum(prop))
+
+# load sequential t-test results for mammal levels of variance
+sequential_t_df <- readRDS("simulation/seq_t_test.RData")
+# get df of rows where first decision is made
+sequential_t_result <- 
+  sequential_t_df %>%
+  group_by(sim) %>%
+  mutate(time = row_number()) %>%
+  filter(decision == "H0" | decision == "H1") %>%
+  slice(1) %>%
+  add_column(method = "sequential t-test")
+
+# get number of replications per trend value
+# needed for calculating acceptance probabilities
+nreplicates_t_test <- (nrow(sequential_t_df) / max(sequential_t_result$time)) / length(unique(sequential_t_result$true_effect))
+
+
+# get operating characteristics of test
+sequential_t_OC <- sequential_t_result %>%  
+  group_by(true_effect, method) %>%
+  mutate(bias = mean(trend - true_effect),
+         variance = var(trend),
+         RMSE = sqrt(bias^2 + variance)) %>%
+  summarise(accept = sum(decision == "H0")/nreplicates_t_test,
+            reject = sum(decision == "H1")/nreplicates_t_test,
+            no_decision = 1 - accept - reject,
+            asn = ceiling(mean(time)),
+            msn = ceiling(median(time)),
+            pct90 = ceiling(quantile(time, 0.9)),
+            trend = mean(trend),
+            bias = unique(bias),
+            variance = unique(variance),
+            RMSE = unique(RMSE))
+```
+
+```{r eval = FALSE}
+# load sequential MLE test for mammal levels of variance
+sequential_mle_df <- readRDS("simulation/seq_comp_trend_test.RData")
+sequential_mle_result <- 
+  sequential_mle_df %>%
+  group_by(sim) %>%
+  mutate(time = row_number()) %>%
+  filter(decision == "H0" | decision == "H1") %>%
+  slice(1) %>%
+  add_column(method = "SMLRT")
+# get trend given chosen outcome (conditioned on termination of test)
+sequential_mle_result <- 
+  sequential_mle_result %>%
+  mutate(trend = ifelse(decision == "H0", trend_null, trend_alt))
+
+# get number of replications per trend value
+# needed for calculating acceptance probabilities
+nreplicates_mle_test <- (nrow(sequential_mle_df) / max(sequential_mle_result$time)) / length(unique(sequential_mle_result$true_effect))
+# get operating characteristics of test
+sequential_mle_OC <- sequential_mle_result %>%  
+  group_by(true_effect, method) %>%
+  mutate(bias = mean(trend - true_effect),
+         variance = var(trend),
+         RMSE = sqrt(bias^2 + variance)) %>%
+  summarise(accept = sum(decision == "H0")/nreplicates_mle_test,
+            reject = sum(decision == "H1")/nreplicates_mle_test,
+            no_decision = 1 - accept - reject,
+            asn = ceiling(mean(time)),
+            msn = ceiling(median(time)),
+            pct90 = ceiling(quantile(time, 0.9)),
+            mean_alt = mean(trend_alt),
+            mean_null = mean(trend_null),
+            trend = mean(trend),
+            bias = unique(bias),
+            variance = unique(variance),
+            RMSE = unique(RMSE))
+```
+
+
+```{r cache = TRUE}
+# look in messy_fixes for complete code
+result_df <- read_csv("simulation/seq_comp_trend_test_result.RData")
+
+# do not condition on succesful termination of SMLRT, ie. include results from unterminated tests
+# these will have "sample size" 100
+sequential_mle_OC_uncond <- result_df %>%
+  add_column(method = "SMLRT") %>%
+  group_by(true_effect, method) %>%
+  mutate(trend = ifelse(decision == "H0", trend_null, trend_alt),
+         bias = mean(trend - true_effect),
+         variance = var(trend),
+         RMSE = sqrt(bias^2 + variance)) %>%
+  mutate(nreplicates = n()) %>%
+  summarise(accept = sum(decision == "H0")/nreplicates,
+            reject = sum(decision == "H1")/nreplicates,
+            no_decision = 1 - accept - reject,
+            asn = ceiling(mean(time)),
+            msn = ceiling(median(time)),
+            pct90 = ceiling(quantile(time, 0.9)),
+            mean_alt = mean(trend_alt),
+            mean_null = mean(trend_null),
+            trend = mean(trend),
+            bias = unique(bias),
+            variance = unique(variance),
+            RMSE = unique(RMSE)) %>%
+  slice(1)
+```
+
+
+
+```{r fixed_sample_size}
+# https://nc.iucnredlist.org/redlist/content/attachment_files/summary_sheet_en_web.pdf
+iucn_crit <- expand_grid(subcriteria = c("A1", "A2, A3, A4"),
+                         category = c("Critically endangered", "endangered", "vulnerable")) %>%
+  add_column(threshold = c(0.9, 0.7, 0.5, 0.8, 0.5, 0.3))
+
+timespan = 9 # for decadal trend assuming initial population size at t = 0
+# compute trend parameter to satisfy IUCN threshold
+iucn_crit <- 
+  iucn_crit %>%
+  mutate(trend = log(1-threshold)/timespan
+         ,linear_trend = -(1 - threshold) / timespan)
+effect_size <- round(iucn_crit$trend/2, 4) %>% unique() %>% append(0)
+effect_sd <- 0.1
+
+# power of fixed sample t-test for detecting minimum relevant effect
+power.ttest.relevant <- power.t.test(delta = 0.0346, sd = 0.1, sig.level = 0.05, power = 0.8, 
+                                     type = "one.sample", alternative = "one.sided")
+# sample size to detect minimum relevant effect size
+# true parameters unknown
+n.ttest.relevant <-  ceiling(power.ttest.relevant$n)
+
+# power for fixed sample t-test when the trend and sd are known
+true_effect_sizes <- 
+  result_df %>% #filter(true_effect < -0.0346) %>% 
+  pull(true_effect) %>% unique()
+
+fixed_sample_size_known <- 
+  tibble(true_effect = true_effect_sizes, 
+       effect_size = -true_effect) %>%
+        arrange(desc(effect_size)) %>%
+  rowwise() %>%
+  mutate(asn =  ifelse(true_effect > -0.0346, # if null is false
+                               NA, # then give NA since sample size can't be calculated
+                               power.t.test(delta = effect_size, sd = effect_sd, sig.level = 0.05, power = 0.8, 
+                                     type = "one.sample", alternative = "one.sided")$n), # otherwise, get sample size
+         asn = ceiling(asn), 
+         msn = asn,
+         pct90 = asn,
+         variance = effect_sd^2/asn,
+         RMSE = sqrt(variance),
+         method = "fixed t-test, known")
+
+# when trend and sd unknown
+fixed_sample_size_unknown <- 
+  tibble(true_effect = true_effect_sizes, 
+       effect_size = -true_effect) %>%
+        arrange(desc(effect_size)) %>%
+  rowwise() %>%
+  mutate(asn = n.ttest.relevant,
+         msn = asn,
+         pct90 = asn,
+         variance = effect_sd^2 / asn,
+         RMSE = sqrt(variance),
+         method = "fixed t-test, unknown")
+
+fixed_sample_OC <- bind_rows(fixed_sample_size_known, fixed_sample_size_unknown)
+```
+
+
+```{r fixed_sample_power_curve, include=FALSE}
+# true_effect_sizes <- result_df %>% pull(true_effect) %>% unique()
+crit_t <- qt(0.95, df = n.ttest.relevant - 1)
+
+fixed_sample_power <- 
+  tibble(effect_sizes = seq(0, min(true_effect_sizes), length.out = 100),
+         power = 1 - pnorm(crit_t - ((-0.0346 - effect_sizes)/(effect_sd/sqrt(n.ttest.relevant))) )) #%>%
+  #add_column(method = "fixed t-test, unknown")
+
+# fixed_sample_power_known <-
+#   tibble(effect_sizes = seq(-0.0346, min(true_effect_sizes), length.out = 100)) %>%
+#   rowwise() %>%
+#   mutate(sample_size = ceiling(power.t.test(delta = -(effect_sizes), sd = effect_sd, 
+#                            sig.level = 0.05, power = 0.8, 
+#                            type = "one.sample", alternative = "one.sided")$n),
+#          power = 1 - pnorm(crit_t - ((-0.0346 - effect_sizes)/(effect_sd/sqrt(sample_size)))))%>%
+#   add_column(method = "fixed t-test, known")
+
+#fixed_sample_power <- bind_rows(fixed_sample_power, fixed_sample_power_known)
+
+# ggplot() +
+#   geom_line(data = aes(x = effect_sizes, y = power)) +
+#   scale_x_reverse() +
+#   geom_vline(xintercept = - 0.0346, linetype = "dashed") +
+#   geom_hline(yintercept = 0.05, linetype = "dashed")
+```
+
+
+# Introduction
+
+For species of conservation relevance it is necessary to determine if populations are decreasing or stable as quickly as possible to support decision making. For example, IUCN red list criteria A provides quantitative thresholds for classifying species or populations into different conservation statuses based on inferred population trends. Trends are commonly detected by regressing (log-)population abundance against time and testing the statistical significance of the linear effect of time on (log-)population size. Many workers have critiqued and refined the approaches for collection and analysis of population data ().  A common recommendation in this literature is to conduct power analyses to determine the number of sampling occasions that would be necessary to detect a trend of a management-relevant effect size constrained by maximum probabilities of false detection (type I error). But, these workers use what are known as “fixed-sample size” approaches which are designed to work when the sample size is planned in advance and all the data are collected prior to analysis. Since population monitoring is an inherently sequential process it is tempting to repeatedly test population time series for trends as the data is collected so that a significant trend can be detected as quickly as possible. However, naive application of fixed-sample statistical approaches is not valid for repeated analysis of accumulating data (Armitage et al, maybe psych paper or clinical trials). 
+
+Repeated testing of accumulating data using fixed-sample tests inflates probability of false alarm. In fact, by the law of the iterated logarithm, repeated testing increases the probability of rejecting the null hypothesis to 1 even when the null hypothesis is true as the sample size increases. This procedure has been referred to as "sampling to a foregone conclusion" (Anscombe) or "optional stopping" (Psych or medical reference?)  and is well known in statistics yet has received little to no attention in ecology despite the ubiquity of settings where repeated tests of sequential observations is desirable (Schipper papers). The practical implication is that if ecologists want to analyse data using fixed sample tests they must wait until the complete dataset is collected before drawing any statistical conclusions from an analysis. Since sample sizes to achieve adequately powered analysis of population trends are often on the scale of decades (White), it means that researchers using these methods cannot identify trends in a timely manner and cannot produce results from monitoring projects on timescale needed to obtain continued funding or achieve career advancement. However, ecologists are not constrained to doing frequent but invalid analysis through improper repetition of fixed sample tests or valid but infrequent analysis through proper use of fixed sample tests. Ecologists could instead use sequential tests which are designed to be repeatedly applied to sequentially observed data and maintain user-defined probabilities of false alarm and failed detection.
+
+In this paper, we first elaborate the issues with repeatedly testing accumulating data using fixed sample methods by demonstrating the inflation of false alarm and biased estimation using simulated data. We then describe and adapt existing sequential tests to population trend detection and use simulation studies to characterize the performance of sequential tests and compare their performance to fixed-sample procedures. We find that sequential tests compare favorably to fixed sample tests even when the sample size of fixed sample tests are chosen using perfect knowledge of simulation parameters. However, estimation following sequential tests is strongly biased towards the accepted hypothesis whereas fixed sample tests are unbiased. Lastly, we discuss Bayesian alternatives to frequentist inference for sequentially collected data.
+
+# Background
+
+The first sequential test was the sequential probability ratio test (SPRT) developed by Abraham Wald for quality control applications during the second world war. The SPRT allowed for testing between two simple hypotheses after every single observation from some sequential process. The SPRT was later shown to be optimal in this hypothesis testing situation: that is, it has the minimum expected sample size of any test that also has the same type I and II error probabilities (Wald and Wolfowitz). As an example, suppose that [provide simple example of simply hypothesis testing situation for normal mean].  
+
+The basic set-up of the SPRT for $x_1, x_2, x_3, \ldots$ normal independent identically distributed data with known variance is as follows:
+
+\begin{equation}
+\Lambda_t = \ln \left( \frac{P_{\hat \theta_1}(x_{1:t}}{P_{\hat \theta_0}(x_{1:t})} \right)
+\end{equation}
+
+Where $P_{\hat \theta_i}(.)$ is the normal likelihood function evaluated at the value of $\theta_i$ under hypothesis $i = 0,1$ for the data that has been observed up to the current time, $t$. After every observation, the log-likelihood ratio $\Lambda_t$ will be compared to two decision boundaries A and B given by:
+
+\begin{align}
+A = \ln \left( \frac{1-\beta}{\alpha} \right) &&
+B = \ln \left( \frac{\beta}{1-\alpha} \right)
+\end{align}
+
+Where the researcher chooses a type I ($\alpha$) and type II ($\beta$) error probability that is acceptable to their objectives.
+
+Comparison of the log likelihood ratio ($\Lambda_t$) can result in three possible outcomes:
+
+* If $\Lambda_t \in (A,B)$ then take another observation. 
+* If $\Lambda_t > A$ reject $H_0$ 
+* If $\Lambda_t < B$ accept $H_0$.
+
+So, unlike fixed sample null hypothesis testing the use of sequential tests allows for the acceptance of null hypothesis (deciding that the population is stable). Whereas a fixed sample approach will often yield "fail to reject null hypothesis", using sequential methods we can differentiate between "need more data" and "fail to reject null hypothesis".
+
+Since the development of this first sequential test for quality control applications, sequential testing procedures have been extended to more complex hypothesis testing scenarios and have seen application in other scientific fields. For instance, the use of sequential testing has been increasingly applied to clinical trials since decisions can be made faster than clinical trials using fixed-sample designs. Sequential testing has also been increasingly advocated for in psychological research []. However, there are drawbacks to sequential tests as well.
+
+[But, cons of sequential testing] Sequential testing approaches can be challenging to extend to more complex hypotheses and it is also challenging to perform estimation following the termination of a sequential test.
+
+[If necessary, add a section on sequential analysis for Bayesians. Contrast with frequentists. Mention adoption of Bayesian sequential analysis for high-stakes testing problems like clinical trials]
+
+# Methods
+
+### Implications of optional stopping
+
+The first simulation study is designed to demonstrate the implications of optional stopping on false alarm probability and estimation. To demonstrate this we focus on a situation where we are interested in testing if the mean of a series of observations from a normal distribution with unit variance are greater than or less than a particular value. That is $H_0: \mu \leq \mu_0$ vs. $H_1: \mu > \mu_0$. Without loss of generality, we choose $\mu_0 = 0$. We consider three values for the true mean of the data generating process: $\mu = 0, 0.05, 0.01$. We consider values of $\mu$ where the null hypothesis is false, but only barely so since point hypotheses are often used even though the null hypothesis may take on an interval, e.g., there is some minimum relevant effect size that is unspecified by the researcher. This is of interest because it may be that the true effect size is below the minimum relevant effect size yet may cause a researcher to draw misleading statistical conclusions. 
+
+For each mean value we simulated 2000 data sets of 100 observations. For each simulated data set we applied one-sided t-tests of the mean as described above until the first instance the p-value was below 0.05. At that time, we then recorded the stopping time and recorded the maximum likelihood estimate of the mean conditioned on the time of stopping. We then computed the cumulative probability of rejecting the null hypothesis for each testing occasion (sample number 3 to 100) and compared the estimate of the mean recorded to the true mean.
+
+### Trend detection simulation study
+
+To compare different trend detection procedures, we simulate data from a stochastic exponential growth model. Under this model we model the log-population size $X_t$ as follows:
+
+\begin{align*}
+X_{t+1} & \sim Normal(x_t + r, \sigma) \\
+X_{0} & = x_0
+\end{align*}
+
+which implies that the process error on the observation scale is log-normally distributed, a standard assumption in ecology (Ecological Detective, log-normality paper). This model is an approximation of more complicated structured stochastic population models (Dennis 1996) and is appropriate for modeling populations that are not near the carry capacity nor any allee thresholds. When using this model, we either assume that the populations are observed without error or that the observation error is constant, in which case we are testing trends for the population index rather than the true population trend (Dennis 1996).
+
+
+If we then take the first differences of the log population sizes, we obtain a sequence of T - 1 observations of a normally distributed random variable with mean equal to the trend and variance equal to the process noise variance.
+
+\begin{align*}
+d_1, \ldots, d_{T-1} & =  
+x_1 - x_0, \ldots, x_T - x_{T-1}\\ 
+& \overset{iid}\sim Normal(r, \sigma) \\
+\end{align*}
+
+Since the first differences are independent and identically distributed normal random variables with mean equal to the trend parameter value and variance equal to the process variance we can test for population declines using the null hypothesis of $r \geq r_0$ and alternative hypothesis $r < r_0$. By taking first differences of the log population abundance we can reduce the problem of testing for trends in stochastic population growth models to testing the value of the mean of independent and identically distributed observations from a normal distribution with unknown variance. This facilitates the use of standard methods for sequential testing.
+
+This model has two parameters: the stochastic trend parameter ($r$) and process noise $\sigma^2$. We choose values of the trend parameter to be the midpoints of the threshold values used in IUCN red list criteria A for classifying species into threat categories as well as zero ($r = 0, -0.0198, -0.0385, -0.0669, -0.0894, -0.1279$). We use values of process noise that are reasonable for large vertebrates to insects ($\sigma = 0.1,$ Holmes CSEG paper). For each combination of trend and process noise value, we simulated 10,000 time series with 100 values of the differenced log population size (i.e., 101 timepoints on the observation scale). 
+
+We applied the following trend detection procedures to these data: sequential t-test, sequential maximum likelihood ratio test (, sequential bayes testing?), and the fixed sample t-test.
+
+#### Sequential t-test
+
+\begin{align*}
+S_1 & = 0 \\
+S_t & = \ln \left( \frac{P(t_{1:t}|df = t-1, \delta)}{P(t_{1:t}|df = t-1)} \right)
+\end{align*}
+
+Where $P(.)$ is the probability density function of t-distribution for the t-statistic $\hat r /\hat\sigma$ given the $df = t - 1$ and hypothesized effect size $\delta = r/\sigma$. Here, I test the hypotheses: $H_0: \mu = \delta\sigma$ vs. $H_1: \mu = \delta'\sigma$ where $\delta = 0$ and $\delta' = \mu_0/\sigma = -0.0346 / 0.1$. The decision boundaries are set using Wald's approximations.
+
+#### Sequential maximum likelihood ratio test
+
+\begin{align*}
+S_0 & = 0 \\
+S_t & = \ln \left( \frac{P_{\hat \theta_1}(d_{1:t} | \hat \theta_1, \hat \sigma^2_1)}{P_{\hat \theta_0}(d_{1:t} | \hat \theta_0, \hat \sigma^2_0)} \right)
+\end{align*}
+
+Where $P_{\hat \theta_i}(.)$ is the normal probability density function evaluated at the maximum likelihood estimate $\theta_i = [\hat r_i,\hat \sigma_i^2]'$ given the restriction on $r$ for hypothesis $i = 0,1$ for the observed differences $d_1,\ldots, d_t$ at time $t$. The decision boundaries are set using Wald's approximations.
+
+#### Fixed sample t-test
+
+\begin{equation*}
+T = \frac{\bar x - \mu_0}{s/\sqrt{n}}
+\end{equation*}
+
+Where the null hypothesis is rejected if $T \geq t_{\alpha/2, n - 1}$ and we accept (fail to reject) it otherwise.
+
+The sample size $n$ chosen for the fixed sample t-test is determined by using the power.t.test function in the base R stats package. For the fixed sample analyses, we consider two situations for sample size determination: 1. Perfect knowledge of model parameters; 2. Only knowledge of minimum relevant trend size. Note that the first scenario is a best case situation for the fixed sample approach while the second situation is more realistic. 
+
+Considering these scenarios will help contextualize the performance of sequential tests, for which we make different assumptions of researcher knowledge. That is, the sequential t-test assumes that the researcher can define an effect size in terms of Cohen’s D (mean / standard deviation), whereas the SMLR test (and Bayesian normal-gamma) model(s) do not require knowledge of system parameters and only requires a minimum relevant trend size from the researcher. 
+
+For all trend detection procedures we test the one sided hypothesis: $H_0:$ vs $H_1:$ We use a value of -0.0346 as the minimum relevant trend value following a suggestion in (Dixon and Pechmann) since this value of the stochastic trend model gives an expected halving time of. Of course, other minimum relevant trend sizes could be used based on monitoring goals. We set a desired false alarm probability of 0.05 and failed detection probability of 0.2 (0.8 power) since this is a common default in ecology (). But note that our use of these thresholds is purely for convention, see (Mapstone, Field, others) for arguments against these defaults in ecology and more justifiable procedures for choosing error probabilities of tests.
+
+To compare trend detection procedures we record metrics from each outcome of applying the trend detection procedure to the simulated data. To evaluate testing operating characteristics, we record the sample size at time of decision for sequential tests and the minimum sample size based on power analysis for fixed sample tests and the decision (accept null or accept alternative) for each made at that time. To evaluate estimation following testing decisions, we record the point estimated of the mean at the time of decision and compute the bias ($\text{Bias}(r) = r - \hat r$) and root mean squared error ($RMSE = \sqrt{(Var(r) + \text{Bias}(r)^2)}$). RMSE error is an appropriate measure of estimation under squared error loss functions. (For bayesian approach, we use posterior mean as the point estimate since this posterior statistic minimizes squared error loss).
+
+# Results
+
+### Implications of optional stopping
+
+```{r optional_stopping_plots, warning = FALSE}
+# Plot of cumulative false alarm probability
+figure1a <- optional_stopping_summary %>%
+  ggplot(aes(x = sample_size, y = cum_H1, col = as.factor(true_effect) )) + geom_step() +
+  geom_hline(yintercept = 0.05, col = "red", linetype = "dashed") +
+  ylim(0,0.5) + xlim(0,25) +
+  labs(y = "Cumulative probability of false alarm",
+       x = "Stopping time (year)",
+       col = "true effect") +
+  theme(legend.position = c(0.8,0.8)
+        , legend.background = element_rect(fill = "transparent", colour = NA) # get rid of legend bg
+      , legend.box.background = element_rect(fill = "transparent", colour = NA)) # get rid of legend panel bg
+# plot of estimates
+figure1b <- optional_stopping_summary %>%
+  mutate(true_effect_facet = paste("true effect = ", true_effect)) %>%
+  ggplot() +
+  geom_jitter(data = optional_stopping_H1, mapping = aes(x = sample_size, y = trend), alpha = 0.01) +
+  geom_line(aes(x = sample_size, y = mean_effect, col = as.factor(true_effect)), size = 1) +
+  geom_line(aes(x = sample_size, y = true_effect), linetype = "dashed", col = "red") +
+  facet_wrap(~true_effect_facet, nrow = 3) +
+  #ylim(-0.5,1.5) + 
+  xlim(0,25) +
+  labs(x = "Stopping time (year)",
+       y = "Estimate at stopping time",
+       col = "true effect")
+
+combined1 <- (figure1a & theme(legend.position = "none")) + figure1b
+combined1  + plot_layout(guides = "collect") +  plot_annotation(tag_levels = 'A')
+```
+*Figure 1. A. Optional stopping inflates false alarm probability. Lines show how cumulative probability of rejecting null hypothesis of no effect when true effect size is zero or marginally non-zero. Dashed horizontal red line marks the nominal false alarm probability (0.05). B. Optional stopping biases inference towards accepted hypothesis and is most biased when stopping occurs at a small sample size. The solid line is the estimated trend conditioned on stopping for significance. The points are estimates from replicate simulations. The dashed red line is the true parameter value.*
+
+### Comparison of trend detection procedures
+
+```{r comparison_table, warning = FALSE, message = FALSE}
+full_OC <- bind_rows(sequential_t_OC, sequential_mle_OC_uncond, fixed_sample_OC)
+
+full_OC %>%
+  select("true value" = true_effect, !(mean_null | mean_alt)) %>%
+  select(method, "true value", "estimate" = trend, accept, reject, "no decision" = no_decision,
+         "ASN" = asn, "MSN" = msn, "90%-ile" = pct90, bias, variance, RMSE) %>%
+  knitr::kable(digits = 3)
+```
+
+```{r}
+# just probability of decision
+full_OC %>%
+  filter(method %in% c("sequential t-test", "SMLRT")) %>%
+  ggplot() +
+  geom_line(data = fixed_sample_power, aes(x = effect_sizes, y = power), linetype = "dotdash") +
+  geom_point(aes(x = true_effect, y = accept), col = "red") +
+  geom_line(aes(x = true_effect, y = accept), col = "red") +
+  geom_point(aes(x = true_effect, y = reject), col = "blue") +
+  geom_line(aes(x = true_effect, y = reject), col = "blue") +
+  geom_point(aes(x = true_effect, y = no_decision)) +
+  geom_line(aes(x = true_effect, y = no_decision)) +
+  geom_vline(xintercept = - 0.0346, linetype = "dashed") +
+  geom_hline(yintercept = 0.05, linetype = "dashed", col = "red") +
+  geom_hline(yintercept = 0.80, linetype = "dashed", col = "blue") +
+  # geom_segment(x = 0, xend = 0.0346, y = 0.05, yend = 0.05, col = "red") +
+  # geom_segment(x = 0.0346, xend = 0.1279,  y = 0.8, yend = 0.8, col = "blue") +
+  scale_x_reverse() +
+  facet_wrap(~method) +
+  theme(legend.position = "n") +
+  labs(x = "trend",
+       y = "proportion or probability")
+```
+*Figure ?. Comparison of trend detection among methods. The solid colored lines are the estimated probability of the test concluding the population is stable (red) or declining (blue) or failing to terminate (black) for the corresponding sequential test. The dot-dash black line is the probablity of concluding the population is declining when the fixed sample t-test is used with parameters unknown (n = 54). The vertical black dashed line denotes the minimum relevant trend size. The red (blue) horizontal dashed lines mark the nominal false alarm (failed alarm) probability $\alpha = 0.05$ ($\beta = 0.80$)*
+
+```{r eval = FALSE}
+# just asn
+plot_asn <-
+  full_OC %>%
+  ggplot() +
+  geom_line(aes(x = true_effect, y = asn, group = method, linetype = method, col = method), size = 1.25) +
+  geom_vline(xintercept = -0.0346, linetype = "dashed") +
+  scale_x_reverse() +
+  ylim(0,100) +
+  labs(x = "trend",
+       y = "average sample number")
+plot_msn <-
+  full_OC %>%
+  ggplot() +
+  geom_line(aes(x = true_effect, y = msn, group = method, linetype = method, col = method), size = 1.25) +
+  geom_vline(xintercept = -0.0346, linetype = "dashed") +
+  ylim(0,100) +
+  scale_x_reverse() +
+  labs(x = "trend",
+       y = "median sample number")
+
+plot_90 <-
+  full_OC %>%
+  ggplot() +
+  geom_line(aes(x = true_effect, y = pct90, group = method, linetype = method, col = method), size = 1.25) +
+  geom_vline(xintercept = -0.0346, linetype = "dashed") +
+  scale_x_reverse() +
+  ylim(0,100) +
+  labs(x = "trend",
+       y = "90%-ile sample number")
+
+combined <- (plot_asn & theme(legend.position = "none")) + (plot_msn & theme(legend.position = "none")) + plot_90
+combined  + plot_layout(guides = "collect") +  plot_annotation(tag_levels = 'A')
+```
+
+```{r}
+# plot efficiency metrics: average, median, and 90th percentile sample sizes
+full_OC %>%
+  ggplot() +
+  geom_line(aes(x = true_effect, y = asn, group = method, linetype = "solid", col = method), size = 1.25) +
+    geom_line(aes(x = true_effect, y = msn, group = method, linetype = "dashed", col = method), size = 1.25) +
+    geom_line(aes(x = true_effect, y = pct90, group = method, linetype = "dotted", col = method), size = 1.25) +
+  geom_vline(xintercept = -0.0346, linetype = "dashed") +
+  scale_x_reverse() +
+  ylim(0,100) +
+  labs(x = "trend",
+       y = "sample number") +
+    facet_wrap(~method, ncol = 5) +
+    theme(legend.position = "n")
+
+```
+*Figure ?. Comparison of statistical sample size (efficiency) among methods. Solid lines are mean sample number, dashed lines are median sample number, and dotted lines are 90^th^ percentile sample number for the time of decision. Note, that the fixed sample size approaches do not have a distribution of sample sizes since they are fixed. The vertical black dashed line denotes the minimum relevant trend size.*
+
+```{r}
+# just RMSE
+plot_rmse <- full_OC %>%
+  ggplot() +
+  geom_line(aes(x = true_effect, y = RMSE, group = method, linetype = method, col = method), size = 1.25) +
+  geom_point(aes(x = true_effect, y = RMSE, group = method, shape = method, col = method), size = 2) +
+  geom_vline(xintercept = -0.0346, linetype = "dashed") +
+  ylim(0,0.09) +
+  scale_x_reverse() +
+  labs(x = "trend",
+       y = "Root mean squared error")
+plot_rmse
+```
+*Figure ?. Comparison of the precision of estimation among methods. Vertical black dashed line denotes the minimum relevant trend size. The line for fixed t-test, known is truncated because sample size for the fixed sample t-test when trend and variance parameters are known cannot be computed when the null hypothesis is true.*
+
+# Discussion
+
